@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const HUGGING_FACE_TOKEN = process.env.HUGGING_FACE_TOKEN;
 const NLU_MODEL_URL = "https://api-inference.huggingface.co/models/HooshvareLab/bert-fa-zwnj-base-ner";
-const TTS_MODEL_URL = "https://api-inference.huggingface.co/models/hassan-k/vits-fa";
+const PRIMARY_TTS_MODEL_URL = "https://api-inference.huggingface.co/models/hassan-k/vits-fa";
+const BACKUP_TTS_MODEL_URL = "https://api-inference.huggingface.co/models/Kamtera/persian-tts-female-vits";
 
-async function queryHuggingFace(modelUrl: string, data: any, isAudio: boolean = false) {
+async function queryHuggingFace(modelUrl: string, data: any) {
   const response = await fetch(
     modelUrl,
     {
@@ -59,15 +60,14 @@ export async function POST(req: NextRequest) {
     }
 
 
-    // 2. Call TTS model to get audio
-    const ttsResponse = await queryHuggingFace(TTS_MODEL_URL, { inputs: botResponseText }, true);
-    const audioBlob = await ttsResponse.blob();
+    // 2. Call TTS model to get audio with fallback
+    const audioBlob = await generateAudioWithFallback(botResponseText);
 
-    // 2. Convert audio blob to base64 to send as JSON
+    // 3. Convert audio blob to base64 to send as JSON
     const audioBuffer = await audioBlob.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString('base64');
 
-    // 3. Send response to client
+    // 4. Send response to client
     return NextResponse.json({
       text: botResponseText,
       audio: audioBase64,
@@ -76,5 +76,26 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error in chat API:', error);
     return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+  }
+}
+
+async function generateAudioWithFallback(text: string): Promise<Blob> {
+  try {
+    // Try primary model first
+    console.log("Attempting to use primary TTS model...");
+    const primaryResponse = await queryHuggingFace(PRIMARY_TTS_MODEL_URL, { inputs: text });
+    return await primaryResponse.blob();
+  } catch (primaryError) {
+    console.warn("Primary TTS model failed. Attempting backup model.", primaryError);
+    try {
+      // If primary fails, try backup model
+      console.log("Attempting to use backup TTS model...");
+      const backupResponse = await queryHuggingFace(BACKUP_TTS_MODEL_URL, { inputs: text });
+      return await backupResponse.blob();
+    } catch (backupError) {
+      console.error("Backup TTS model also failed.", backupError);
+      // If both fail, throw an error to be caught by the main handler
+      throw new Error("Both primary and backup TTS models failed.");
+    }
   }
 }

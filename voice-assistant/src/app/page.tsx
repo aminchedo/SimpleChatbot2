@@ -1,8 +1,6 @@
 'use client';
-
-'use client';
 // NOTE: You need to run `npm install framer-motion` for the animations to work.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import TypingIndicator from '@/components/TypingIndicator';
@@ -11,6 +9,7 @@ type Message = {
   id: number;
   text: string;
   sender: 'user' | 'bot';
+  timestamp: string;
 };
 
 type Status = 'idle' | 'listening' | 'thinking' | 'replying';
@@ -26,6 +25,14 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>('idle');
   const { text, isListening, startListening, stopListening, hasRecognitionSupport } = useSpeechRecognition();
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (isListening) {
@@ -52,7 +59,13 @@ export default function Home() {
     const processRequest = async () => {
       if (status === 'thinking' && text) {
         // Add user message to chat
-        setMessages(prev => [...prev, { id: Date.now(), text, sender: 'user' }]);
+        const userMessage: Message = {
+          id: Date.now(),
+          text,
+          sender: 'user',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages(prev => [...prev, userMessage]);
 
         try {
           // Send text to backend API
@@ -69,7 +82,13 @@ export default function Home() {
           const data = await response.json();
 
           setStatus('replying');
-          setMessages(prev => [...prev, { id: Date.now(), text: data.text, sender: 'bot' }]);
+          const botMessage: Message = {
+            id: Date.now(),
+            text: data.text,
+            sender: 'bot',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          setMessages(prev => [...prev, botMessage]);
 
           await playAudio(data.audio);
 
@@ -77,7 +96,13 @@ export default function Home() {
 
         } catch (error) {
           console.error("Error processing chat request:", error);
-          setMessages(prev => [...prev, { id: Date.now(), text: "Sorry, I couldn't respond right now.", sender: 'bot' }]);
+          const errorMessage: Message = {
+            id: Date.now(),
+            text: "Sorry, I couldn't respond right now.",
+            sender: 'bot',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          setMessages(prev => [...prev, errorMessage]);
           setStatus('idle');
         }
       }
@@ -97,7 +122,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <div className="w-full max-w-2xl flex flex-col h-[90vh] bg-gray-800 rounded-2xl shadow-lg">
         {/* Chat history */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4">
           {messages.length === 0 && status === 'idle' ? (
              <p className="text-center text-gray-400">Your conversation will appear here.</p>
           ) : (
@@ -109,11 +134,12 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div className={`px-4 py-2 rounded-lg max-w-xs lg:max-w-md ${msg.sender === 'user' ? 'bg-blue-600' : 'bg-gray-700'}`}>
                     <p>{msg.text}</p>
                   </div>
+                  <p className="text-xs text-gray-400 mt-1 px-1">{msg.timestamp}</p>
                 </motion.div>
               ))}
             </AnimatePresence>
