@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   experimental: {
     webpackBuildWorker: true,
   },
@@ -9,6 +10,12 @@ const nextConfig = {
       fs: false,
     };
     return config;
+  },
+  // Enable compression
+  compress: true,
+  // Optimize images
+  images: {
+    formats: ['image/webp', 'image/avif'],
   },
 }
 
