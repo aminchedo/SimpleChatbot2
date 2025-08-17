@@ -4,7 +4,6 @@
   "outputDirectory": "frontend/.next",
   "framework": "nextjs",
   "installCommand": "cd frontend && npm install",
-  "rootDirectory": "frontend",
   "functions": {
     "frontend/app/**/*.tsx": {
       "runtime": "nodejs18.x"
