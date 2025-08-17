@@ -49,7 +49,8 @@ export default function AudioRecorder({
     if (audioBlob) {
       onProcessingChange(true);
       const arrayBuffer = await audioBlob.arrayBuffer();
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
       
       // Add user message immediately
       const userMessage = {
