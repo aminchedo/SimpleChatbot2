@@ -1,8 +1,8 @@
 'use client';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
-import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface VoiceOnlyRecorderProps {
@@ -10,18 +10,17 @@ interface VoiceOnlyRecorderProps {
 }
 
 export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRecorderProps) {
-  const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
   const [conversation, setConversation] = useState<any[]>([]);
   const [lastTranscription, setLastTranscription] = useState('');
   const [botResponse, setBotResponse] = useState('');
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
-  const { startRecording, stopRecording } = useAudioRecorder({
-    onDataAvailable: setAudioBlob,
+  // Initialize Web Speech API
+  const { recognition, synthesis, isSupported: speechSupported } = useWebSpeechAPI({
+    lang: 'fa-IR',
+    continuous: false,
+    interimResults: false
   });
 
   const { sendMessage, isConnected, connectionError } = useWebSocket({
@@ -34,9 +33,13 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
         setLastTranscription(data.user_message);
         setBotResponse(data.bot_message);
         
-        // Play audio response
-        if (data.audio && !isMuted) {
-          await playAudioResponse(data.audio);
+        // Play audio response using Web Speech API
+        if (data.bot_message && !isMuted && synthesis.isSupported) {
+          synthesis.speak(data.bot_message, {
+            rate: 0.8,
+            pitch: 1,
+            volume: 1
+          });
         }
         
         // Update conversation
@@ -56,50 +59,48 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   });
 
-  // Auto-send audio when recording stops
+  // Handle speech recognition results
   useEffect(() => {
-    if (audioBlob && !isRecording) {
-      handleSendAudio(audioBlob);
-      setAudioBlob(null);
+    if (recognition.transcript && !recognition.isListening) {
+      handleSpeechRecognized(recognition.transcript);
+      recognition.resetTranscript();
     }
-  }, [audioBlob, isRecording]);
+  }, [recognition.transcript, recognition.isListening]);
 
-  const handleRecordToggle = useCallback(async () => {
-    if (isProcessing) return;
+  // Handle speech recognition errors
+  useEffect(() => {
+    if (recognition.error) {
+      console.error('Speech recognition error:', recognition.error);
+      setIsProcessing(false);
+    }
+  }, [recognition.error]);
+
+  const handleSpeechRecognized = useCallback(async (transcript: string) => {
+    if (!transcript.trim()) return;
     
-    if (isRecording) {
-      await stopRecording();
-      setIsRecording(false);
-      setIsProcessing(true);
-    } else {
-      // Stop any playing audio
-      if (currentAudio) {
-        currentAudio.pause();
-        setIsPlaying(false);
-      }
-      
-      await startRecording();
-      setIsRecording(true);
-    }
-  }, [isRecording, isProcessing, startRecording, stopRecording, currentAudio]);
+    setIsProcessing(true);
+    setLastTranscription(transcript);
 
-  const handleSendAudio = useCallback(async (audioBlob: Blob) => {
     if (!isConnected) {
       // Demo mode - show a sample response
       const demoResponses = [
-        { user: "سلام", bot: "سلام! خوش آمدید. چطور می‌تونم کمکتون کنم؟" },
-        { user: "حالت چطوره؟", bot: "من یک ربات هوشمندم و همیشه آماده کمک به شما هستم!" },
-        { user: "چه خبر؟", bot: "متأسفانه سرویس صوتی در دسترس نیست، اما رابط کاربری کار می‌کند." }
+        { user: transcript, bot: "سلام! خوش آمدید. چطور می‌تونم کمکتون کنم؟" },
+        { user: transcript, bot: "من یک ربات هوشمندم و همیشه آماده کمک به شما هستم!" },
+        { user: transcript, bot: "متأسفانه سرویس آنلاین در دسترس نیست، اما می‌تونم به صورت آفلاین کمکتون کنم." }
       ];
       
       const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)];
       
-      setLastTranscription(randomResponse.user);
       setBotResponse(randomResponse.bot);
+      
+      // Speak the demo response
+      if (!isMuted && synthesis.isSupported) {
+        synthesis.speak(randomResponse.bot);
+      }
       
       const newTurn = {
         id: Date.now(),
-        user: randomResponse.user,
+        user: transcript,
         bot: randomResponse.bot,
         timestamp: new Date(),
         emotion: 'neutral'
@@ -107,86 +108,67 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       
       setConversation(prev => [...prev, newTurn]);
       onConversationUpdate([...conversation, newTurn]);
+      setIsProcessing(false);
       return;
     }
 
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
-    
+    // Send to backend via WebSocket
     const success = sendMessage({
-      type: 'audio',
-      data: base64Audio,
+      type: 'text',
+      text: transcript,
       timestamp: Date.now()
     });
 
     if (!success) {
-      console.warn('Failed to send audio message - WebSocket not connected');
+      console.warn('Failed to send message - WebSocket not connected');
+      setIsProcessing(false);
     }
-  }, [sendMessage, isConnected, conversation, onConversationUpdate]);
+  }, [sendMessage, isConnected, conversation, onConversationUpdate, isMuted, synthesis]);
 
-  const playAudioResponse = useCallback(async (base64Audio: string) => {
-    try {
-      const audioData = atob(base64Audio);
-      const uint8Array = new Uint8Array(audioData.length);
-      for (let i = 0; i < audioData.length; i++) {
-        uint8Array[i] = audioData.charCodeAt(i);
+  const handleRecordToggle = useCallback(async () => {
+    if (isProcessing) return;
+    
+    if (recognition.isListening) {
+      recognition.stopListening();
+    } else {
+      // Stop any playing speech
+      if (synthesis.isSpeaking) {
+        synthesis.cancel();
       }
-      const audioBlob = new Blob([uint8Array], {
-        type: 'audio/wav'
-      });
       
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      
-      setCurrentAudio(audio);
-      setIsPlaying(true);
-      
-      audio.onended = () => {
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      audio.onerror = () => {
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      await audio.play();
-      
-    } catch (error) {
-      console.error('Audio playback error:', error);
-      setIsPlaying(false);
+      recognition.startListening();
     }
-  }, []);
+  }, [recognition, synthesis, isProcessing]);
 
   // Auto-start recording after bot finishes speaking
   useEffect(() => {
-    if (!isPlaying && !isProcessing && !isRecording && conversation.length > 0) {
+    if (!synthesis.isSpeaking && !isProcessing && !recognition.isListening && conversation.length > 0) {
       // Wait a moment then auto-record
       const timer = setTimeout(() => {
-        if (!isRecording && !isProcessing && isConnected) {
+        if (!recognition.isListening && !isProcessing && isConnected && speechSupported) {
           handleRecordToggle();
         }
       }, 1500);
       
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, isProcessing, isRecording, conversation.length, isConnected]);
+  }, [synthesis.isSpeaking, isProcessing, recognition.isListening, conversation.length, isConnected, speechSupported]);
 
   const getStatusText = () => {
+    if (!speechSupported) return '🔴 مرورگر از تشخیص صدا پشتیبانی نمی‌کند';
     if (!isConnected) return '🔴 اتصال قطع شده';
     if (isProcessing) return '🧠 در حال پردازش...';
-    if (isRecording) return '🎤 در حال ضبط صدا...';
-    if (isPlaying) return '🔊 ربات در حال صحبت...';
-    return '👂 گوش می‌دهم... کلیک کنید';
+    if (recognition.isListening) return '🎤 در حال گوش دادن...';
+    if (synthesis.isSpeaking) return '🔊 ربات در حال صحبت...';
+    return '👂 آماده شنیدن - کلیک کنید';
   };
 
   const getStatusColor = () => {
+    if (!speechSupported) return 'text-red-400';
     if (!isConnected) return 'text-red-400';
     if (isProcessing) return 'text-blue-400';
-    if (isRecording) return 'text-green-400';
-    if (isPlaying) return 'text-purple-400';
+    if (recognition.isListening) return 'text-green-400';
+    if (synthesis.isSpeaking) return 'text-purple-400';
     return 'text-gray-300';
   };
 
@@ -207,6 +189,15 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           </span>
         </div>
         
+        {/* Speech API Support Status */}
+        <div className={`flex items-center space-x-2 text-xs ${
+          speechSupported ? 'text-green-400' : 'text-yellow-400'
+        }`}>
+          <span className="persian-text">
+            {speechSupported ? '🎤 تشخیص صدا فعال' : '⚠️ تشخیص صدا در دسترس نیست'}
+          </span>
+        </div>
+        
         {connectionError && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -214,7 +205,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
             className="text-xs text-yellow-400 text-center persian-text max-w-md"
           >
             {connectionError === 'Backend service not available' 
-              ? 'سرویس صوتی در دسترس نیست - در حالت نمایشی' 
+              ? 'سرویس آنلاین در دسترس نیست - در حالت آفلاین' 
               : 'خطا در اتصال به سرور'}
           </motion.div>
         )}
@@ -233,6 +224,11 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
               <div className="mb-4">
                 <p className="text-sm text-blue-300 mb-1">شما گفتید:</p>
                 <p className="text-white text-lg">{lastTranscription}</p>
+                {recognition.confidence > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    اطمینان: {Math.round(recognition.confidence * 100)}%
+                  </p>
+                )}
               </div>
             )}
             
@@ -250,21 +246,23 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       <div className="relative">
         <motion.button
           onClick={handleRecordToggle}
-          disabled={isProcessing}
+          disabled={isProcessing || !speechSupported}
           className={`relative w-32 h-32 rounded-full border-4 transition-all duration-300 ${
-            isRecording 
+            !speechSupported
+              ? 'bg-gray-500 border-gray-400 cursor-not-allowed'
+              : recognition.isListening 
               ? 'bg-red-500 border-red-300 shadow-lg shadow-red-500/50' 
               : isProcessing
               ? 'bg-blue-500 border-blue-300 shadow-lg shadow-blue-500/50'
-              : isPlaying
+              : synthesis.isSpeaking
               ? 'bg-purple-500 border-purple-300 shadow-lg shadow-purple-500/50'
               : isConnected
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-300 hover:shadow-lg hover:shadow-green-500/50'
               : 'bg-gradient-to-r from-yellow-500 to-orange-500 border-yellow-300 hover:shadow-lg hover:shadow-yellow-500/50'
           }`}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          animate={isRecording ? {
+          whileHover={speechSupported ? { scale: 1.05 } : {}}
+          whileTap={speechSupported ? { scale: 0.95 } : {}}
+          animate={recognition.isListening ? {
             scale: [1, 1.1, 1],
             transition: { duration: 1, repeat: Infinity }
           } : isProcessing ? {
@@ -272,21 +270,23 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
             transition: { duration: 2, repeat: Infinity, ease: "linear" }
           } : {}}
         >
-          {isProcessing ? (
+          {!speechSupported ? (
+            <div className="w-12 h-12 text-white mx-auto flex items-center justify-center text-2xl">🚫</div>
+          ) : isProcessing ? (
             <div className="w-12 h-12 text-white mx-auto flex items-center justify-center text-2xl">🧠</div>
-          ) : isPlaying ? (
+          ) : synthesis.isSpeaking ? (
             <Volume2 className="w-12 h-12 text-white mx-auto" />
-          ) : isRecording ? (
+          ) : recognition.isListening ? (
             <MicOff className="w-12 h-12 text-white mx-auto" />
           ) : (
             <Mic className="w-12 h-12 text-white mx-auto" />
           )}
           
           {/* Pulse Animation */}
-          {(isRecording || isPlaying) && (
+          {(recognition.isListening || synthesis.isSpeaking) && (
             <motion.div
               className={`absolute inset-0 rounded-full border-4 ${
-                isRecording ? 'border-red-400' : 'border-purple-400'
+                recognition.isListening ? 'border-red-400' : 'border-purple-400'
               }`}
               animate={{
                 scale: [1, 1.5, 2],
@@ -314,6 +314,13 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
         {conversation.length > 0 && (
           <p className="text-gray-400 mt-2 persian-text">
             مکالمه: {conversation.length} پیام
+          </p>
+        )}
+        
+        {/* Voice Information */}
+        {synthesis.persianVoice && (
+          <p className="text-xs text-gray-500 mt-1">
+            صدای فارسی: {synthesis.persianVoice.name}
           </p>
         )}
       </motion.div>
