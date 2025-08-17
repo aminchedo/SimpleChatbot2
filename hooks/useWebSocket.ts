@@ -3,44 +3,48 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 interface UseWebSocketProps {
   url: string;
   onMessage: (data: any) => void;
-  maxRetries?: number;
-  retryInterval?: number;
 }
 
-export function useWebSocket({ 
-  url, 
-  onMessage, 
-  maxRetries = 5, 
-  retryInterval = 3000 
-}: UseWebSocketProps) {
+export function useWebSocket({ url, onMessage }: UseWebSocketProps) {
   const [isConnected, setIsConnected] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = parseInt(process.env.NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS || '5');
 
   const connect = useCallback(() => {
-    // Don't attempt connection if URL contains placeholder or if max retries exceeded
-    if (url.includes('your-backend.railway.app') || retryCount >= maxRetries) {
-      console.warn('WebSocket connection disabled: Backend not configured or max retries exceeded');
-      setConnectionError('Backend service not available');
-      return;
-    }
-
     try {
-      console.log(`Attempting WebSocket connection to: ${url} (attempt ${retryCount + 1}/${maxRetries})`);
+      // Validate URL
+      if (!url) {
+        console.error('WebSocket URL is required');
+        setConnectionStatus('error');
+        return;
+      }
+
+      setConnectionStatus('connecting');
       const ws = new WebSocket(url);
       
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected to:', url);
         setIsConnected(true);
-        setRetryCount(0);
-        setConnectionError(null);
+        setConnectionStatus('connected');
+        reconnectAttempts.current = 0;
+        
+        // Send ping to verify connection
+        ws.send(JSON.stringify({ type: 'ping' }));
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          
+          // Handle pong responses
+          if (data.type === 'pong') {
+            console.log('WebSocket ping successful');
+            return;
+          }
+          
           onMessage(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -48,71 +52,75 @@ export function useWebSocket({
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected', event.code, event.reason);
+        console.log('WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
+        setConnectionStatus('disconnected');
         
-        // Only attempt to reconnect if we haven't exceeded max retries
-        if (retryCount < maxRetries) {
-          setRetryCount(prev => prev + 1);
+        // Attempt to reconnect if not intentionally closed
+        if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
+          reconnectAttempts.current++;
+          const reconnectDelay = Math.min(3000 * Math.pow(2, reconnectAttempts.current - 1), 30000);
+          
+          console.log(`Reconnecting in ${reconnectDelay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+          
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, retryInterval);
-        } else {
-          setConnectionError('Failed to connect after maximum retries');
-          console.error('Max WebSocket reconnection attempts exceeded');
+          }, reconnectDelay);
+        } else if (reconnectAttempts.current >= maxReconnectAttempts) {
+          console.error('Max reconnection attempts reached');
+          setConnectionStatus('error');
         }
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         setIsConnected(false);
+        setConnectionStatus('error');
       };
 
       wsRef.current = ws;
     } catch (error) {
       console.error('Error creating WebSocket:', error);
       setIsConnected(false);
-      setConnectionError('Failed to create WebSocket connection');
+      setConnectionStatus('error');
     }
-  }, [url, onMessage, retryCount, maxRetries, retryInterval]);
+  }, [url, onMessage, maxReconnectAttempts]);
 
   const sendMessage = useCallback((message: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
-      return true;
+      try {
+        wsRef.current.send(JSON.stringify(message));
+      } catch (error) {
+        console.error('Error sending WebSocket message:', error);
+      }
     } else {
-      console.warn('WebSocket is not connected - message not sent');
-      return false;
+      console.warn('WebSocket is not connected. Current state:', wsRef.current?.readyState);
     }
   }, []);
 
-  const resetConnection = useCallback(() => {
-    setRetryCount(0);
-    setConnectionError(null);
-    if (wsRef.current) {
-      wsRef.current.close();
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
     }
-    connect();
-  }, [connect]);
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'User initiated disconnect');
+    }
+    setConnectionStatus('disconnected');
+  }, []);
 
   useEffect(() => {
     connect();
 
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      disconnect();
     };
-  }, [connect]);
+  }, [connect, disconnect]);
 
   return {
     isConnected,
+    connectionStatus,
     sendMessage,
-    connectionError,
-    retryCount,
-    resetConnection,
+    disconnect,
+    reconnect: connect,
   };
 }

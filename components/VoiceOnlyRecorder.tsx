@@ -1,194 +1,149 @@
 'use client';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
-import { useAudioRecorder } from '@/hooks/useAudioRecorder';
-import { useWebSocket } from '@/hooks/useWebSocket';
+import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
+import { usePersianChatbot } from '@/hooks/usePersianChatbot';
+
+interface ChatMessage {
+  id: string;
+  user: string;
+  bot: string;
+  timestamp: Date;
+  emotion: string;
+}
 
 interface VoiceOnlyRecorderProps {
-  onConversationUpdate: (conversation: any[]) => void;
+  onConversationUpdate: (conversation: ChatMessage[]) => void;
 }
 
 export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
-  const [conversation, setConversation] = useState<any[]>([]);
   const [lastTranscription, setLastTranscription] = useState('');
   const [botResponse, setBotResponse] = useState('');
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  
-  const { startRecording, stopRecording } = useAudioRecorder({
-    onDataAvailable: setAudioBlob,
+  const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+
+  // Initialize browser-based services
+  const { conversation, isProcessing, processMessage } = usePersianChatbot({
+    onNewMessage: (message) => {
+      setLastTranscription(message.user);
+      setBotResponse(message.bot);
+      onConversationUpdate(conversation);
+    }
   });
 
-  const { sendMessage, isConnected, connectionError } = useWebSocket({
-    url: process.env.NEXT_PUBLIC_WS_URL || 
-         (process.env.NODE_ENV === 'production' 
-           ? '' // Disable WebSocket in production if not configured
-           : 'ws://localhost:8000/ws/chat'),
-    onMessage: async (data) => {
-      if (data.type === 'message') {
-        setLastTranscription(data.user_message);
-        setBotResponse(data.bot_message);
-        
-        // Play audio response
-        if (data.audio && !isMuted) {
-          await playAudioResponse(data.audio);
+  const { speak, isSpeaking, isSupported: ttsSupported } = useSpeechSynthesis({
+    onStart: () => console.log('🔊 TTS started'),
+    onEnd: () => {
+      console.log('🔇 TTS ended');
+      // Auto-start recording after bot finishes speaking
+      setTimeout(() => {
+        if (!isRecording && !isProcessing) {
+          handleStartRecording();
         }
-        
-        // Update conversation
-        const newTurn = {
-          id: Date.now(),
-          user: data.user_message,
-          bot: data.bot_message,
-          timestamp: new Date(),
-          emotion: data.emotion || 'neutral'
-        };
-        
-        setConversation(prev => [...prev, newTurn]);
-        onConversationUpdate([...conversation, newTurn]);
-        
-        setIsProcessing(false);
-      }
+      }, 1000);
+    },
+    onError: (errorMsg) => {
+      console.error('TTS Error:', errorMsg);
+      setError(errorMsg);
     }
   });
 
-  // Auto-send audio when recording stops
-  useEffect(() => {
-    if (audioBlob && !isRecording) {
-      handleSendAudio(audioBlob);
-      setAudioBlob(null);
-    }
-  }, [audioBlob, isRecording]);
-
-  const handleRecordToggle = useCallback(async () => {
-    if (isProcessing) return;
-    
-    if (isRecording) {
-      await stopRecording();
+  const { isListening, isSupported: sttSupported, startListening, stopListening } = useSpeechRecognition({
+    onResult: async (transcript, confidence) => {
+      console.log('📝 Transcript received:', transcript, 'Confidence:', confidence);
       setIsRecording(false);
-      setIsProcessing(true);
-    } else {
-      // Stop any playing audio
-      if (currentAudio) {
-        currentAudio.pause();
-        setIsPlaying(false);
-      }
       
-      await startRecording();
-      setIsRecording(true);
-    }
-  }, [isRecording, isProcessing, startRecording, stopRecording, currentAudio]);
-
-  const handleSendAudio = useCallback(async (audioBlob: Blob) => {
-    if (!isConnected) {
-      // Demo mode - show a sample response
-      const demoResponses = [
-        { user: "سلام", bot: "سلام! خوش آمدید. چطور می‌تونم کمکتون کنم؟" },
-        { user: "حالت چطوره؟", bot: "من یک ربات هوشمندم و همیشه آماده کمک به شما هستم!" },
-        { user: "چه خبر؟", bot: "متأسفانه سرویس صوتی در دسترس نیست، اما رابط کاربری کار می‌کند." }
-      ];
-      
-      const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)];
-      
-      setLastTranscription(randomResponse.user);
-      setBotResponse(randomResponse.bot);
-      
-      const newTurn = {
-        id: Date.now(),
-        user: randomResponse.user,
-        bot: randomResponse.bot,
-        timestamp: new Date(),
-        emotion: 'neutral'
-      };
-      
-      setConversation(prev => [...prev, newTurn]);
-      onConversationUpdate([...conversation, newTurn]);
-      return;
-    }
-
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
-    
-    const success = sendMessage({
-      type: 'audio',
-      data: base64Audio,
-      timestamp: Date.now()
-    });
-
-    if (!success) {
-      console.warn('Failed to send audio message - WebSocket not connected');
-    }
-  }, [sendMessage, isConnected, conversation, onConversationUpdate]);
-
-  const playAudioResponse = useCallback(async (base64Audio: string) => {
-    try {
-      const audioData = atob(base64Audio);
-      const uint8Array = new Uint8Array(audioData.length);
-      for (let i = 0; i < audioData.length; i++) {
-        uint8Array[i] = audioData.charCodeAt(i);
-      }
-      const audioBlob = new Blob([uint8Array], {
-        type: 'audio/wav'
-      });
-      
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      
-      setCurrentAudio(audio);
-      setIsPlaying(true);
-      
-      audio.onended = () => {
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      audio.onerror = () => {
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      await audio.play();
-      
-    } catch (error) {
-      console.error('Audio playback error:', error);
-      setIsPlaying(false);
-    }
-  }, []);
-
-  // Auto-start recording after bot finishes speaking
-  useEffect(() => {
-    if (!isPlaying && !isProcessing && !isRecording && conversation.length > 0) {
-      // Wait a moment then auto-record
-      const timer = setTimeout(() => {
-        if (!isRecording && !isProcessing && isConnected) {
-          handleRecordToggle();
+      if (confidence > 0.3) { // Minimum confidence threshold
+        try {
+          const message = await processMessage(transcript);
+          
+          // Speak the bot response if not muted
+          if (!isMuted && message.bot) {
+            speak(message.bot);
+          }
+        } catch (error) {
+          console.error('Error processing message:', error);
+          setError('خطا در پردازش پیام');
         }
-      }, 1500);
-      
+      } else {
+        setError('کیفیت تشخیص صدا پایین است. دوباره تلاش کنید.');
+      }
+    },
+    onError: (errorMsg) => {
+      console.error('STT Error:', errorMsg);
+      setIsRecording(false);
+      setError(errorMsg);
+    }
+  });
+
+  // Update connection status based on browser API support
+  useEffect(() => {
+    if (sttSupported && ttsSupported) {
+      setConnectionStatus('connected');
+      setError(null);
+    } else {
+      setConnectionStatus('disconnected');
+      if (!sttSupported) {
+        setError('مرورگر شما از تشخیص گفتار پشتیبانی نمی‌کند');
+      } else if (!ttsSupported) {
+        setError('مرورگر شما از تبدیل متن به گفتار پشتیبانی نمی‌کند');
+      }
+    }
+  }, [sttSupported, ttsSupported]);
+
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, isProcessing, isRecording, conversation.length, isConnected]);
+  }, [error]);
+
+  const handleStartRecording = useCallback(() => {
+    if (!sttSupported || isProcessing || isSpeaking) return;
+    
+    setError(null);
+    setIsRecording(true);
+    startListening();
+  }, [sttSupported, isProcessing, isSpeaking, startListening]);
+
+  const handleStopRecording = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    }
+    setIsRecording(false);
+  }, [isListening, stopListening]);
+
+  const handleRecordToggle = useCallback(() => {
+    if (isRecording) {
+      handleStopRecording();
+    } else {
+      handleStartRecording();
+    }
+  }, [isRecording, handleStartRecording, handleStopRecording]);
 
   const getStatusText = () => {
-    if (!isConnected) return '🔴 اتصال قطع شده';
+    if (!sttSupported || !ttsSupported) return '🔴 مرورگر پشتیبانی نمی‌کند';
+    if (error) return `❌ ${error}`;
     if (isProcessing) return '🧠 در حال پردازش...';
     if (isRecording) return '🎤 در حال ضبط صدا...';
-    if (isPlaying) return '🔊 ربات در حال صحبت...';
-    return '👂 گوش می‌دهم... کلیک کنید';
+    if (isSpeaking) return '🔊 ربات در حال صحبت...';
+    return '👂 آماده شنیدن... کلیک کنید';
   };
 
   const getStatusColor = () => {
-    if (!isConnected) return 'text-red-400';
+    if (!sttSupported || !ttsSupported || error) return 'text-red-400';
     if (isProcessing) return 'text-blue-400';
     if (isRecording) return 'text-green-400';
-    if (isPlaying) return 'text-purple-400';
+    if (isSpeaking) return 'text-purple-400';
     return 'text-gray-300';
   };
+
+  const isSystemReady = sttSupported && ttsSupported && !error;
 
   return (
     <div className="flex flex-col items-center space-y-8 p-8">
@@ -196,29 +151,34 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className={`flex flex-col items-center space-y-2`}
+        className={`flex items-center space-x-2 text-sm ${
+          connectionStatus === 'connected' && isSystemReady ? 'text-green-400' : 'text-red-400'
+        }`}
       >
-        <div className={`flex items-center space-x-2 text-sm ${
-          isConnected ? 'text-green-400' : 'text-red-400'
-        }`}>
-          {isConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
-          <span className="persian-text">
-            {isConnected ? 'متصل به سرور' : 'قطع ارتباط'}
-          </span>
-        </div>
-        
-        {connectionError && (
+        {connectionStatus === 'connected' && isSystemReady ? (
+          <Wifi size={16} />
+        ) : (
+          <WifiOff size={16} />
+        )}
+        <span className="persian-text">
+          {connectionStatus === 'connected' && isSystemReady ? 'آماده استفاده' : 'سیستم آماده نیست'}
+        </span>
+      </motion.div>
+
+      {/* Error Display */}
+      <AnimatePresence>
+        {error && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-xs text-yellow-400 text-center persian-text max-w-md"
+            exit={{ opacity: 0, y: -20 }}
+            className="flex items-center space-x-2 bg-red-500/20 border border-red-400 rounded-lg px-4 py-2"
           >
-            {connectionError === 'Backend service not available' 
-              ? 'سرویس صوتی در دسترس نیست - در حالت نمایشی' 
-              : 'خطا در اتصال به سرور'}
+            <AlertCircle size={16} className="text-red-400" />
+            <span className="text-red-300 text-sm persian-text">{error}</span>
           </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
 
       {/* Conversation Display */}
       <AnimatePresence>
@@ -250,20 +210,20 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       <div className="relative">
         <motion.button
           onClick={handleRecordToggle}
-          disabled={isProcessing}
+          disabled={!isSystemReady || isProcessing}
           className={`relative w-32 h-32 rounded-full border-4 transition-all duration-300 ${
             isRecording 
               ? 'bg-red-500 border-red-300 shadow-lg shadow-red-500/50' 
               : isProcessing
               ? 'bg-blue-500 border-blue-300 shadow-lg shadow-blue-500/50'
-              : isPlaying
+              : isSpeaking
               ? 'bg-purple-500 border-purple-300 shadow-lg shadow-purple-500/50'
-              : isConnected
+              : isSystemReady
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-300 hover:shadow-lg hover:shadow-green-500/50'
-              : 'bg-gradient-to-r from-yellow-500 to-orange-500 border-yellow-300 hover:shadow-lg hover:shadow-yellow-500/50'
+              : 'bg-gray-500 border-gray-400 cursor-not-allowed'
           }`}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={isSystemReady ? { scale: 1.05 } : {}}
+          whileTap={isSystemReady ? { scale: 0.95 } : {}}
           animate={isRecording ? {
             scale: [1, 1.1, 1],
             transition: { duration: 1, repeat: Infinity }
@@ -274,7 +234,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
         >
           {isProcessing ? (
             <div className="w-12 h-12 text-white mx-auto flex items-center justify-center text-2xl">🧠</div>
-          ) : isPlaying ? (
+          ) : isSpeaking ? (
             <Volume2 className="w-12 h-12 text-white mx-auto" />
           ) : isRecording ? (
             <MicOff className="w-12 h-12 text-white mx-auto" />
@@ -283,7 +243,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           )}
           
           {/* Pulse Animation */}
-          {(isRecording || isPlaying) && (
+          {(isRecording || isSpeaking) && (
             <motion.div
               className={`absolute inset-0 rounded-full border-4 ${
                 isRecording ? 'border-red-400' : 'border-purple-400'
@@ -334,6 +294,22 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           {isMuted ? 'صدا خاموش' : 'صدا روشن'}
         </span>
       </motion.button>
+
+      {/* Browser Support Info */}
+      {(!sttSupported || !ttsSupported) && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center bg-yellow-500/20 border border-yellow-400 rounded-lg p-4 max-w-md"
+        >
+          <p className="text-yellow-300 text-sm persian-text mb-2">
+            ⚠️ برای استفاده کامل از این ربات، از مرورگرهای زیر استفاده کنید:
+          </p>
+          <p className="text-yellow-200 text-xs">
+            Chrome, Edge, Safari (جدید), Firefox
+          </p>
+        </motion.div>
+      )}
     </div>
   );
 }

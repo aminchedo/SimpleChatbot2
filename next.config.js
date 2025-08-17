@@ -1,21 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   experimental: {
     webpackBuildWorker: true,
   },
+  swcMinify: true, // یا false اگر مشکل SWC باقی ماند
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
     };
     return config;
-  },
-  // Enable compression
-  compress: true,
-  // Optimize images
-  images: {
-    formats: ['image/webp', 'image/avif'],
   },
 }
 

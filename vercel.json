@@ -1,15 +1,49 @@
 {
-  "version": 2,
   "framework": "nextjs",
+  "buildCommand": "npm run build",
   "functions": {
-    "app/api/**/*.js": {
-      "runtime": "nodejs18.x"
-    },
-    "pages/api/**/*.js": {
-      "runtime": "nodejs18.x"
+    "app/api/**/*.ts": {
+      "maxDuration": 30
     }
   },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Requested-With"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ],
   "env": {
-    "HF_TOKEN": "@hf_token"
+    "NODE_ENV": "production"
   }
 }

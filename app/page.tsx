@@ -4,16 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import VoiceOnlyRecorder from '@/components/VoiceOnlyRecorder';
 import VoiceVisualizer from '@/components/VoiceVisualizer';
 
-interface ConversationTurn {
-  id: number;
+interface ChatMessage {
+  id: string;
   user: string;
   bot: string;
   timestamp: Date;
-  emotion?: string;
+  emotion: string;
 }
 
 export default function VoiceOnlyChat() {
-  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [isActive, setIsActive] = useState(false);
 
   return (
@@ -79,9 +79,21 @@ export default function VoiceOnlyChat() {
             با من صحبت کنید - فقط با صدا!
           </motion.p>
           
-          <p className="text-lg text-purple-300">
-            🎤 Real-time Voice • 🧠 AI Persian • 🔊 Natural Speech
+          <p className="text-lg text-purple-300 mb-4">
+            🎤 Web Speech API • 🧠 Client-Side AI • 🔊 Browser TTS • ⚡ No Backend Required
           </p>
+
+          {/* New Features Badge */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5 }}
+            className="inline-flex items-center bg-green-500/20 border border-green-400 rounded-full px-4 py-2 mb-4"
+          >
+            <span className="text-green-300 text-sm font-medium">
+              ✨ بدون نیاز به سرور - کاملاً رایگان!
+            </span>
+          </motion.div>
         </motion.header>
 
         {/* Voice Visualizer */}
@@ -91,21 +103,55 @@ export default function VoiceOnlyChat() {
 
         {/* Voice Recorder */}
         <VoiceOnlyRecorder 
-          onConversationUpdate={(conv) => {
+          onConversationUpdate={(conv: ChatMessage[]) => {
             setConversation(conv);
             setIsActive(conv.length > 0);
           }}
         />
+
+        {/* Features Info */}
+        <motion.div
+          className="text-center mt-8 max-w-4xl mx-auto px-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+            <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+              <div className="text-2xl mb-2">🎤</div>
+              <h3 className="text-white font-semibold mb-1">تشخیص گفتار</h3>
+              <p className="text-purple-200 text-xs">Web Speech API</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+              <div className="text-2xl mb-2">🧠</div>
+              <h3 className="text-white font-semibold mb-1">هوش مصنوعی</h3>
+              <p className="text-purple-200 text-xs">Client-Side Processing</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+              <div className="text-2xl mb-2">🔊</div>
+              <h3 className="text-white font-semibold mb-1">تبدیل متن به گفتار</h3>
+              <p className="text-purple-200 text-xs">Browser TTS</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+              <div className="text-2xl mb-2">⚡</div>
+              <h3 className="text-white font-semibold mb-1">سرعت بالا</h3>
+              <p className="text-purple-200 text-xs">No Server Needed</p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Footer Info */}
         <motion.footer 
           className="text-center mt-12 text-purple-200"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
+          transition={{ delay: 1.2 }}
         >
           <p className="text-sm">
-            🔧 Multi-Engine STT • 🎯 BERT Emotion • 🗣️ Natural TTS • ⚡ Real-time
+            🌟 کاملاً رایگان • 🔒 حفظ حریم خصوصی • 🚀 بدون محدودیت استفاده
+          </p>
+          <p className="text-xs mt-2 text-purple-300">
+            برای بهترین تجربه از Chrome, Edge, Safari یا Firefox استفاده کنید
           </p>
         </motion.footer>
       </div>
