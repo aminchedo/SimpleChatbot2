@@ -1,12 +1,20 @@
 'use client';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
+interface ConversationTurn {
+  id: number;
+  user: string;
+  bot: string;
+  timestamp: Date;
+  emotion: string;
+}
+
 interface VoiceOnlyRecorderProps {
-  onConversationUpdate: (conversation: any[]) => void;
+  onConversationUpdate: (conversation: ConversationTurn[]) => void;
 }
 
 export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRecorderProps) {
@@ -15,7 +23,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
-  const [conversation, setConversation] = useState<any[]>([]);
+  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
   const [lastTranscription, setLastTranscription] = useState('');
   const [botResponse, setBotResponse] = useState('');
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -55,13 +63,25 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   });
 
+  const handleSendAudio = useCallback(async (audioBlob: Blob) => {
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const base64Audio = btoa(String.fromCharCode(...Array.from(uint8Array)));
+    
+    sendMessage({
+      type: 'audio',
+      data: base64Audio,
+      timestamp: Date.now()
+    });
+  }, [sendMessage]);
+
   // Auto-send audio when recording stops
   useEffect(() => {
     if (audioBlob && !isRecording) {
       handleSendAudio(audioBlob);
       setAudioBlob(null);
     }
-  }, [audioBlob, isRecording]);
+  }, [audioBlob, isRecording, handleSendAudio]);
 
   const handleRecordToggle = useCallback(async () => {
     if (isProcessing) return;
@@ -82,21 +102,12 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   }, [isRecording, isProcessing, startRecording, stopRecording, currentAudio]);
 
-  const handleSendAudio = useCallback(async (audioBlob: Blob) => {
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    
-    sendMessage({
-      type: 'audio',
-      data: base64Audio,
-      timestamp: Date.now()
-    });
-  }, [sendMessage]);
+
 
   const playAudioResponse = useCallback(async (base64Audio: string) => {
     try {
       const audioData = atob(base64Audio);
-      const audioBlob = new Blob([new Uint8Array([...audioData].map(c => c.charCodeAt(0)))], {
+      const audioBlob = new Blob([new Uint8Array(Array.from(audioData).map(c => c.charCodeAt(0)))], {
         type: 'audio/wav'
       });
       
@@ -136,7 +147,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, isProcessing, isRecording, conversation.length, isConnected]);
+  }, [isPlaying, isProcessing, isRecording, conversation.length, isConnected, handleRecordToggle]);
 
   const getStatusText = () => {
     if (!isConnected) return '🔴 اتصال قطع شده';

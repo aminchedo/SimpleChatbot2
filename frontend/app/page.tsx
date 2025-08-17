@@ -1,11 +1,17 @@
 'use client';
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import VoiceOnlyRecorder from '@/components/VoiceOnlyRecorder';
 import VoiceVisualizer from '@/components/VoiceVisualizer';
 
 export default function VoiceOnlyChat() {
-  const [conversation, setConversation] = useState([]);
+  const [conversation, setConversation] = useState<Array<{
+    id: number;
+    user: string;
+    bot: string;
+    timestamp: Date;
+    emotion: string;
+  }>>([]);
   const [isActive, setIsActive] = useState(false);
 
   return (
@@ -88,6 +94,9 @@ export default function VoiceOnlyChat() {
             setIsActive(conv.length > 0);
           }}
         />
+        
+        {/* Debug conversation count (hidden) */}
+        <div className="hidden">{conversation.length}</div>
 
         {/* Footer Info */}
         <motion.footer 
