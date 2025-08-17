@@ -1,169 +1,155 @@
-# 🏛️ Persian AI Chatbot - Modern Full-Stack Application
+# Simple Chatbot
 
-A stunning Persian AI chatbot with cutting-edge UI using Next.js 14 and FastAPI backend. Features real-time audio processing, beautiful animations, and production-ready deployment.
+یک چت‌بات ساده با استفاده از Node.js، Express، و Socket.io که قابلیت پردازش پیام‌های متنی و تصاویر را دارد.
 
-## 🚀 Features
+## ویژگی‌ها
 
-### Frontend (Next.js 14)
-- **Modern UI/UX**: Stunning interface with Framer Motion animations
-- **Real-time Audio**: Web Audio API integration with voice visualizer
-- **Persian RTL Support**: Beautiful Persian typography with Vazir font
-- **Responsive Design**: Mobile-first approach with touch gestures
-- **WebSocket Communication**: Real-time bidirectional communication
+- چت real-time با Socket.io
+- پردازش پیام‌های متنی و تصاویر
+- رابط کاربری مدرن و responsive
+- پشتیبانی از Docker
+- CI/CD با GitLab
+- قابلیت deployment خودکار
 
-### Backend (FastAPI)
-- **Audio Processing**: Advanced pipeline with FFmpeg and Whisper
-- **Persian AI**: Intent understanding and response generation
-- **WebSocket Server**: Real-time message handling
-- **Async Architecture**: High-performance async/await patterns
-- **Production Ready**: Comprehensive error handling and logging
+## نصب و راه‌اندازی
 
-## 🛠️ Tech Stack
+### پیش‌نیازها
 
-**Frontend:**
-- Next.js 14 with App Router
-- React 18 + TypeScript
-- Tailwind CSS + Framer Motion
-- Lucide React Icons
-- Web Audio API
+- Node.js (نسخه 18 یا بالاتر)
+- Docker و Docker Compose
+- Git
 
-**Backend:**
-- FastAPI + Python 3.11
-- WebSockets for real-time communication
-- Whisper for speech recognition
-- PyTorch + Transformers
-- FFmpeg for audio processing
+### راه‌اندازی محلی
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
-- Python 3.11+
-- FFmpeg
-
-### Development Setup
-
-1. **Clone and setup:**
+1. کلون کردن پروژه:
 ```bash
-git clone <repository>
-cd persian-ai-chatbot
+git clone <repository-url>
+cd SimpleChatbot2
 ```
 
-2. **Frontend setup:**
+2. نصب dependencies:
 ```bash
-cd frontend
+# Backend
+cd backend
 npm install
-npm run dev
+
+# Frontend
+cd ../frontend
+npm install
 ```
 
-3. **Backend setup:**
+3. تنظیم متغیرهای محیطی:
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
+cp .env.example .env
+# ویرایش فایل .env با تنظیمات مورد نیاز
 ```
 
-4. **Docker setup (optional):**
+4. اجرای پروژه:
 ```bash
-docker-compose up --build
+# با Docker Compose
+docker-compose up -d
+
+# یا به صورت جداگانه
+cd backend && npm start
+cd frontend && npm start
 ```
 
-### Access the Application
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+## GitLab CI/CD
 
-## 🎯 Usage
+این پروژه از GitLab CI/CD برای اتوماسیون فرآیند build، test و deployment استفاده می‌کند.
 
-1. **Voice Chat**: Click the microphone button to start recording
-2. **Real-time Processing**: Watch the voice visualizer during recording
-3. **AI Response**: Receive intelligent Persian responses with audio
-4. **Text Chat**: Type messages for text-based conversation
+### Pipeline Stages
 
-## 🏗️ Architecture
+1. **Test**: اجرای تست‌های unit
+2. **Build**: ساخت Docker images
+3. **Deploy**: استقرار در محیط‌های staging و production
 
-```
-persian-ai-chatbot/
-├── frontend/                 # Next.js 14 App
-│   ├── app/                 # App Router pages
-│   ├── components/          # React components
-│   ├── hooks/              # Custom hooks
-│   └── services/           # API clients
-├── backend/                # FastAPI App
-│   ├── main.py            # FastAPI server
-│   ├── services/          # AI & Audio services
-│   └── websocket/         # WebSocket handlers
-└── docker-compose.yml     # Development setup
-```
+### متغیرهای محیطی مورد نیاز در GitLab
 
-## 🔧 Configuration
+در تنظیمات GitLab CI/CD Variables، متغیرهای زیر را تعریف کنید:
 
-### Environment Variables
+#### Docker Registry
+- `CI_REGISTRY_USER`: نام کاربری registry
+- `CI_REGISTRY_PASSWORD`: رمز عبور registry
 
-**Frontend (.env.local):**
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+#### SSH و Server Configuration
+- `SSH_PRIVATE_KEY`: کلید خصوصی SSH برای اتصال به سرور
+- `STAGING_SERVER`: آدرس IP یا دامنه سرور staging
+- `STAGING_USER`: نام کاربری سرور staging
+- `STAGING_PATH`: مسیر پروژه در سرور staging
+- `STAGING_URL`: URL محیط staging
+- `PRODUCTION_SERVER`: آدرس IP یا دامنه سرور production
+- `PRODUCTION_USER`: نام کاربری سرور production
+- `PRODUCTION_PATH`: مسیر پروژه در سرور production
+- `PRODUCTION_URL`: URL محیط production
 
-**Backend (.env):**
-```env
-PYTHONPATH=/app
-PYTHONUNBUFFERED=1
-```
+### راه‌اندازی GitLab Repository
 
-## 🚀 Deployment
-
-### Frontend (Vercel)
+1. ایجاد repository جدید در GitLab
+2. اضافه کردن GitLab remote:
 ```bash
-cd frontend
-npm run build
-# Deploy to Vercel
+git remote add gitlab <gitlab-repository-url>
 ```
 
-### Backend (Railway/Heroku)
+3. Push کردن کد:
 ```bash
-cd backend
-# Deploy to Railway or Heroku
+git push gitlab main
 ```
 
-## 🎨 Customization
+## Docker
 
-### Adding New Intents
-Edit `backend/services/ai_models.py`:
-```python
-self.responses = {
-    "your_intent": [
-        "Your Persian response 1",
-        "Your Persian response 2"
-    ]
-}
+### Build کردن Images
+
+```bash
+# Build همه services
+docker-compose build
+
+# Build یک service خاص
+docker-compose build backend
 ```
 
-### Styling
-Modify `frontend/app/globals.css` and Tailwind classes.
+### اجرای در محیط Production
 
-### Audio Processing
-Enhance `backend/services/audio_processor.py` for better audio quality.
+```bash
+docker-compose -f docker-compose.production.yml up -d
+```
 
-## 🤝 Contributing
+## مستندات API
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+API endpoints در فایل `backend/routes/` تعریف شده‌اند.
 
-## 📝 License
+### WebSocket Events
 
-This project is licensed under the MIT License.
+- `message`: ارسال پیام جدید
+- `image`: ارسال تصویر
+- `user_connected`: اتصال کاربر جدید
+- `user_disconnected`: قطع اتصال کاربر
 
-## 🙏 Acknowledgments
+## ساختار پروژه
 
-- Whisper by OpenAI for speech recognition
-- Framer Motion for animations
-- Vazir font for Persian typography
-- FastAPI for the amazing Python framework
+```
+SimpleChatbot2/
+├── backend/              # Backend Node.js
+├── frontend/             # Frontend static files
+├── nginx/                # Nginx configuration
+├── docker-compose.yml    # Development environment
+├── docker-compose.production.yml  # Production environment
+├── .gitlab-ci.yml        # GitLab CI/CD pipeline
+└── README.md
+```
 
----
+## مشارکت
 
-**Built with ❤️ for the Persian AI community**
+1. Fork کردن پروژه
+2. ایجاد feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit کردن تغییرات (`git commit -m 'Add amazing feature'`)
+4. Push کردن به branch (`git push origin feature/amazing-feature`)
+5. ایجاد Pull Request
+
+## لایسنس
+
+این پروژه تحت لایسنس MIT منتشر شده است.
+
+## پشتیبانی
+
+برای گزارش باگ یا درخواست ویژگی جدید، از GitLab Issues استفاده کنید.
