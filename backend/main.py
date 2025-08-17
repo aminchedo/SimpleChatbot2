@@ -17,6 +17,9 @@ from middleware.security import setup_security_middleware
 from middleware.validation import audio_validator, text_validator, websocket_validator
 from utils.logger import app_logger
 
+# Add CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
+
 # Import existing services
 try:
     from websocket.connection_manager import ConnectionManager
@@ -78,6 +81,15 @@ app = FastAPI(
 
 # Setup security middleware
 app = setup_security_middleware(app)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize services
 connection_manager = ConnectionManager()
@@ -245,11 +257,7 @@ async def handle_audio_message(websocket: WebSocket, data: dict, client_id: str)
         intent_data = await ai_models.understand_intent(extracted_text)
         intent_data['emotion'] = voice_result.get('emotion', 'neutral')
         
-<<<<<<< HEAD
-        response_text = await ai_models.generate_response(intent_data, extracted_text)
-=======
         response_text = await ai_models.generate_response(intent_data)
->>>>>>> origin/cursor/persian-ai-chatbot-production-readiness-5fed
         
         # Generate voice response
         response_audio = await voice_processor.generate_voice_response(
@@ -303,11 +311,7 @@ async def handle_text_message(websocket: WebSocket, data: dict, client_id: str):
         
         # Process with AI
         intent_data = await ai_models.understand_intent(text_input)
-<<<<<<< HEAD
-        response_text = await ai_models.generate_response(intent_data, text_input)
-=======
         response_text = await ai_models.generate_response(intent_data)
->>>>>>> origin/cursor/persian-ai-chatbot-production-readiness-5fed
         
         processing_time = (datetime.now() - start_time).total_seconds()
         

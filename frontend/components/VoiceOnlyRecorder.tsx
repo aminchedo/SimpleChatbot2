@@ -26,9 +26,15 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
 
   const { sendMessage, isConnected } = useWebSocket({
     url: process.env.NODE_ENV === 'production' 
-      ? 'wss://your-backend.railway.app/ws/chat'
+      ? process.env.NEXT_PUBLIC_WS_URL || 'wss://your-backend-domain.com/ws/chat'
       : 'ws://localhost:8000/ws/chat',
     onMessage: async (data) => {
+      if (data.type === 'error') {
+        console.error('WebSocket error:', data.message);
+        // Handle connection errors gracefully
+        return;
+      }
+      
       if (data.type === 'message') {
         setLastTranscription(data.user_message);
         setBotResponse(data.bot_message);
