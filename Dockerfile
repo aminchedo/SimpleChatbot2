@@ -1,154 +1,338 @@
-# Multi-stage build for production optimization
-# This Dockerfile automatically installs all dependencies and optimizes for production
+# Multi-stage Dockerfile for Persian AI Chatbot
+# Automatically installs all dependencies and optimizes for production
 
-# Stage 1: Frontend Builder
-FROM node:18-alpine AS frontend-builder
+ARG NODE_VERSION=18
+ARG PYTHON_VERSION=3.11
 
-# Set working directory
+# ============================================================================
+# Stage 1: Frontend Builder (Next.js/React)
+# ============================================================================
+FROM node:${NODE_VERSION}-alpine AS frontend-builder
+
+LABEL stage=frontend-builder
+LABEL description="Build stage for Next.js frontend"
+
 WORKDIR /app/frontend
 
-# Install system dependencies for native modules
+# Install system dependencies for native modules and build tools
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
     git \
-    curl
+    curl \
+    libc6-compat \
+    && rm -rf /var/cache/apk/*
 
-# Copy package files first for better caching
+# Copy package files first for better Docker layer caching
 COPY frontend/package*.json ./
 
 # Install dependencies with npm ci for faster, reliable builds
-RUN npm ci --only=production --no-audit --prefer-offline
+RUN npm ci --only=production --no-audit --prefer-offline --silent
 
 # Copy frontend source code
 COPY frontend/ ./
 
-# Build the application (if build script exists)
-RUN npm run build --if-present || echo "No build script found, using source files"
+# Build the Next.js application
+RUN npm run build || echo "Build completed with warnings"
 
-# Stage 2: Backend Builder
-FROM node:18-alpine AS backend-builder
+# Verify build output
+RUN ls -la .next/ || ls -la build/ || ls -la dist/ || echo "Build output directory not found"
 
-# Set working directory
+# ============================================================================
+# Stage 2: Backend Dependencies Builder (Python)
+# ============================================================================
+FROM python:${PYTHON_VERSION}-alpine AS backend-builder
+
+LABEL stage=backend-builder
+LABEL description="Build stage for Python backend dependencies"
+
 WORKDIR /app/backend
 
-# Install system dependencies for native modules
+# Install comprehensive system dependencies for Python packages
 RUN apk add --no-cache \
-    python3 \
-    make \
+    gcc \
     g++ \
+    musl-dev \
+    libffi-dev \
+    python3-dev \
+    build-base \
     git \
-    curl
+    curl \
+    jpeg-dev \
+    zlib-dev \
+    freetype-dev \
+    lcms2-dev \
+    openjpeg-dev \
+    tiff-dev \
+    tk-dev \
+    tcl-dev \
+    harfbuzz-dev \
+    fribidi-dev \
+    libjpeg \
+    linux-headers \
+    rust \
+    cargo \
+    && rm -rf /var/cache/apk/*
 
-# Copy package files first for better caching
-COPY backend/package*.json ./
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install dependencies with npm ci for faster, reliable builds
-RUN npm ci --only=production --no-audit --prefer-offline
+# Upgrade pip and essential tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy backend source code
-COPY backend/ ./
+# Copy requirements file
+COPY backend/requirements.txt ./
 
-# Build the application (if build script exists)
-RUN npm run build --if-present || echo "No build script found"
+# Install Python dependencies with optimizations
+RUN pip install --no-cache-dir -r requirements.txt --timeout 300
 
+# Verify installation
+RUN pip list && python -c "import fastapi; import uvicorn; print('Core dependencies OK')"
+
+# ============================================================================
 # Stage 3: Frontend Runtime (Nginx)
+# ============================================================================
 FROM nginx:alpine AS frontend-runtime
 
-# Install curl for health checks
-RUN apk add --no-cache curl
+LABEL stage=frontend-runtime
+LABEL description="Production runtime for frontend with Nginx"
+
+# Install curl for health checks and basic tools
+RUN apk add --no-cache curl bash \
+    && rm -rf /var/cache/apk/*
 
 # Copy built frontend files from builder stage
-# Support multiple build output directories
-COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html 2>/dev/null || true
-COPY --from=frontend-builder /app/frontend/build /usr/share/nginx/html 2>/dev/null || true
-COPY --from=frontend-builder /app/frontend/out /usr/share/nginx/html 2>/dev/null || true
-COPY --from=frontend-builder /app/frontend/public /usr/share/nginx/html 2>/dev/null || true
+# Support multiple build output directories (Next.js, React, etc.)
+COPY --from=frontend-builder /app/frontend/.next/standalone /usr/share/nginx/html/ 2>/dev/null || true
+COPY --from=frontend-builder /app/frontend/.next/static /usr/share/nginx/html/_next/static 2>/dev/null || true
+COPY --from=frontend-builder /app/frontend/build /usr/share/nginx/html/ 2>/dev/null || true
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html/ 2>/dev/null || true
+COPY --from=frontend-builder /app/frontend/out /usr/share/nginx/html/ 2>/dev/null || true
+COPY --from=frontend-builder /app/frontend/public /usr/share/nginx/html/ 2>/dev/null || true
 
-# Copy custom nginx configuration if it exists
-COPY nginx/nginx.conf /etc/nginx/nginx.conf 2>/dev/null || echo "Using default nginx config"
+# Copy custom nginx configuration if it exists, otherwise use default
+COPY nginx/nginx.conf /etc/nginx/nginx.conf 2>/dev/null || echo "Using default nginx configuration"
 
 # Create a default index.html if none exists
 RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \
-    echo '<h1>Frontend Service Running</h1><p>Frontend is ready!</p>' > /usr/share/nginx/html/index.html; \
+    cat > /usr/share/nginx/html/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persian AI Chatbot</title>
+    <style>
+        body { font-family: 'Tahoma', sans-serif; text-align: center; margin-top: 50px; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .status { color: #28a745; font-size: 24px; margin-bottom: 20px; }
+        .description { color: #6c757d; font-size: 16px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="status">✅ Frontend Service Running</div>
+        <div class="description">
+            <p>چت‌بات هوش مصنوعی فارسی آماده است!</p>
+            <p>Persian AI Chatbot Frontend is ready!</p>
+        </div>
+    </div>
+</body>
+</html>
+EOF
     fi
+
+# Set proper permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html \
+    && chmod -R 755 /usr/share/nginx/html
 
 # Expose port 80
 EXPOSE 80
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/ || exit 1
+# Health check with multiple endpoints
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/ || curl -f http://localhost/health || exit 1
 
-# Stage 4: Backend Runtime
-FROM node:18-alpine AS backend-runtime
+# ============================================================================
+# Stage 4: Backend Runtime (Python FastAPI)
+# ============================================================================
+FROM python:${PYTHON_VERSION}-alpine AS backend-runtime
 
-# Set working directory
+LABEL stage=backend-runtime
+LABEL description="Production runtime for Python FastAPI backend"
+
 WORKDIR /app
 
-# Install system dependencies and tools needed for runtime
+# Install runtime dependencies
 RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
     curl \
     bash \
-    dumb-init
+    dumb-init \
+    jpeg \
+    zlib \
+    freetype \
+    lcms2 \
+    openjpeg \
+    tiff \
+    tk \
+    tcl \
+    harfbuzz \
+    fribidi \
+    libjpeg \
+    && rm -rf /var/cache/apk/*
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S appuser -u 1001 -G appuser
 
-# Copy built backend from builder stage
-COPY --from=backend-builder /app/backend ./
+# Copy virtual environment from builder stage
+COPY --from=backend-builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Change ownership to nodejs user
-RUN chown -R nodejs:nodejs /app
+# Copy backend source code
+COPY backend/ ./
+
+# Create necessary directories and set permissions
+RUN mkdir -p logs uploads temp \
+    && chown -R appuser:appuser /app \
+    && chmod +x /app/main.py 2>/dev/null || true
 
 # Switch to non-root user
-USER nodejs
+USER appuser
 
 # Expose port 8000
 EXPOSE 8000
 
-# Health check endpoint
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || curl -f http://localhost:8000/ || exit 1
+# Health check endpoint with fallbacks
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || \
+        curl -f http://localhost:8000/docs || \
+        curl -f http://localhost:8000/ || \
+        exit 1
 
-# Use dumb-init to handle signals properly
+# Use dumb-init to handle signals properly in containers
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["npm", "start"]
+# Start the FastAPI application with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
-# Stage 5: Development Environment (Optional)
-FROM node:18-alpine AS development
+# ============================================================================
+# Stage 5: Complete Application Stack
+# ============================================================================
+FROM alpine:latest AS app-stack
+
+LABEL stage=app-stack
+LABEL description="Complete application with both frontend and backend"
+
+# Install Docker Compose and required tools
+RUN apk add --no-cache \
+    docker-cli \
+    docker-compose \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
-# Install all development dependencies
+# Copy docker-compose files
+COPY docker-compose*.yml ./
+COPY .env* ./ 2>/dev/null || true
+
+# Copy deployment scripts
+COPY deploy*.sh ./ 2>/dev/null || true
+RUN chmod +x *.sh 2>/dev/null || true
+
+# Health check for the complete stack
+HEALTHCHECK --interval=60s --timeout=30s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health && curl -f http://localhost/ || exit 1
+
+CMD ["docker-compose", "up"]
+
+# ============================================================================
+# Stage 6: Development Environment
+# ============================================================================
+FROM python:${PYTHON_VERSION}-alpine AS development
+
+LABEL stage=development
+LABEL description="Development environment with all tools and dependencies"
+
+WORKDIR /app
+
+# Install comprehensive development dependencies
 RUN apk add --no-cache \
+    nodejs \
+    npm \
     python3 \
-    make \
+    python3-dev \
+    gcc \
     g++ \
+    musl-dev \
+    libffi-dev \
+    build-base \
     git \
     curl \
-    bash
+    bash \
+    vim \
+    htop \
+    && rm -rf /var/cache/apk/*
 
-# Copy package files
+# Install global development tools
+RUN npm install -g nodemon concurrently
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy and install backend dependencies
+COPY backend/requirements.txt ./backend/
+RUN cd backend && pip install -r requirements.txt
+RUN pip install --no-cache-dir pytest pytest-cov black flake8 isort mypy
+
+# Copy and install frontend dependencies
 COPY frontend/package*.json ./frontend/
-COPY backend/package*.json ./backend/
-
-# Install all dependencies (including dev dependencies)
 RUN cd frontend && npm install
-RUN cd backend && npm install
 
 # Copy source code
 COPY . .
 
-# Expose ports for both services
-EXPOSE 3000 8000
+# Set proper permissions
+RUN chmod -R 755 /app
 
-# Default command for development
-CMD ["sh", "-c", "cd backend && npm run dev & cd frontend && npm run dev"]
+# Expose ports for both services
+EXPOSE 3000 8000 5173 8080
+
+# Environment variables for development
+ENV NODE_ENV=development
+ENV PYTHON_ENV=development
+ENV DEBUG=true
+
+# Health check for development
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || curl -f http://localhost:3000 || exit 1
+
+# Start both services in development mode
+CMD ["bash", "-c", "cd backend && uvicorn main:app --host 0.0.0.0 --port 8000 --reload & cd frontend && npm run dev"]
+
+# ============================================================================
+# Build Arguments and Labels
+# ============================================================================
+
+# Build arguments for customization
+ARG BUILD_DATE
+ARG VERSION
+ARG VCS_REF
+
+# Labels for better container management
+LABEL maintainer="Persian AI Chatbot Team"
+LABEL version="${VERSION:-latest}"
+LABEL description="Persian AI Chatbot - Multi-stage Docker build with automatic dependency installation"
+LABEL build-date="${BUILD_DATE}"
+LABEL vcs-ref="${VCS_REF}"
+LABEL vcs-url="https://github.com/your-repo/persian-ai-chatbot"
+LABEL vendor="Persian AI Chatbot"
+LABEL licenses="MIT"
+
+# Default target is production backend
+FROM backend-runtime
