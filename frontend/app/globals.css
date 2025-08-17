@@ -4,11 +4,12 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: rgba(255, 255, 255, 0.2);
   }
   
   body {
-    @apply bg-background text-foreground;
+    background: #1a1a2e;
+    color: #ffffff;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
   
@@ -55,4 +56,16 @@
   font-family: 'Vazir', 'Tahoma', 'Arial', sans-serif;
   line-height: 1.8;
   letter-spacing: 0.02em;
+  direction: rtl;
+  text-align: right;
+}
+
+/* Animation keyframes */
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px) 
+  }
+  50% { 
+    transform: translateY(-20px) 
+  }
 }
