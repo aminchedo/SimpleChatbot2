@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  // حذف appDir از experimental
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
