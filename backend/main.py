@@ -47,7 +47,7 @@ except ImportError as e:
             return True
         async def understand_intent(self, text: str):
             return {"intent": "chat", "confidence": 0.8}
-        async def generate_response(self, intent_data: dict):
+        async def generate_response(self, intent_data: dict, user_text: str = ""):
             return "سلام! چطور می‌توانم کمکتان کنم؟"
     
     class VoiceProcessor:
@@ -245,7 +245,7 @@ async def handle_audio_message(websocket: WebSocket, data: dict, client_id: str)
         intent_data = await ai_models.understand_intent(extracted_text)
         intent_data['emotion'] = voice_result.get('emotion', 'neutral')
         
-        response_text = await ai_models.generate_response(intent_data)
+        response_text = await ai_models.generate_response(intent_data, extracted_text)
         
         # Generate voice response
         response_audio = await voice_processor.generate_voice_response(
@@ -299,7 +299,7 @@ async def handle_text_message(websocket: WebSocket, data: dict, client_id: str):
         
         # Process with AI
         intent_data = await ai_models.understand_intent(text_input)
-        response_text = await ai_models.generate_response(intent_data)
+        response_text = await ai_models.generate_response(intent_data, text_input)
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
