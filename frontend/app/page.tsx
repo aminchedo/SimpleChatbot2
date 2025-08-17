@@ -1,46 +1,37 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ChatInterface from '@/components/ChatInterface';
-import AudioRecorder from '@/components/AudioRecorder';
+import VoiceOnlyRecorder from '@/components/VoiceOnlyRecorder';
 import VoiceVisualizer from '@/components/VoiceVisualizer';
 
-interface Message {
-  id: string;
-  type: 'user' | 'bot';
-  content: string;
-  timestamp: number;
-  audio?: string;
-}
-
-export default function Home() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+export default function VoiceOnlyChat() {
+  const [conversation, setConversation] = useState([]);
+  const [isActive, setIsActive] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -inset-10 opacity-50">
-          {[...Array(50)].map((_, i) => (
+        <div className="absolute -inset-10 opacity-30">
+          {[...Array(100)].map((_, i) => (
             <motion.div
               key={i}
               className="absolute rounded-full bg-white/10"
               style={{
-                width: Math.random() * 4 + 1,
-                height: Math.random() * 4 + 1,
+                width: Math.random() * 6 + 2,
+                height: Math.random() * 6 + 2,
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
               }}
               animate={{
-                y: [0, -30, 0],
-                opacity: [0.3, 1, 0.3],
+                y: [0, -50, 0],
+                opacity: [0.2, 1, 0.2],
+                scale: [1, 1.2, 1],
               }}
               transition={{
-                duration: Math.random() * 3 + 2,
+                duration: Math.random() * 4 + 3,
                 repeat: Infinity,
-                delay: Math.random() * 2,
+                delay: Math.random() * 3,
               }}
             />
           ))}
@@ -48,49 +39,67 @@ export default function Home() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-screen">
+      <div className="relative z-10 flex flex-col h-screen justify-center">
         {/* Header */}
         <motion.header 
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="p-6 text-center"
+          className="text-center mb-12"
         >
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 gradient-text persian-text">
-            هوش مصنوعی فارسی
-          </h1>
-          <p className="text-xl text-purple-200 persian-text">با من فارسی صحبت کنید</p>
+          <motion.h1 
+            className="text-5xl md:text-7xl font-bold text-white mb-4 persian-text"
+            animate={{
+              backgroundPosition: ['0%', '100%'],
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            style={{
+              background: 'linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffeaa7)',
+              backgroundSize: '200% 100%',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+            }}
+          >
+            🗣️ ربات گفتگوی فارسی
+          </motion.h1>
+          
+          <motion.p 
+            className="text-2xl text-purple-200 mb-2 persian-text"
+            animate={{ opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            با من صحبت کنید - فقط با صدا!
+          </motion.p>
+          
+          <p className="text-lg text-purple-300">
+            🎤 Real-time Voice • 🧠 AI Persian • 🔊 Natural Speech
+          </p>
         </motion.header>
 
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4">
-          <ChatInterface 
-            messages={messages}
-            isProcessing={isProcessing}
-          />
-          
-          {/* Voice Visualizer */}
-          <AnimatePresence>
-            {isRecording && (
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                className="my-8"
-              >
-                <VoiceVisualizer isActive={isRecording} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Audio Recorder */}
-          <div className="sticky bottom-0 pb-6">
-            <AudioRecorder 
-              onRecordingChange={setIsRecording}
-              onMessage={(msg) => setMessages(prev => [...prev, msg])}
-              onProcessingChange={setIsProcessing}
-            />
-          </div>
+        {/* Voice Visualizer */}
+        <div className="mb-8">
+          <VoiceVisualizer isActive={isActive} />
         </div>
+
+        {/* Voice Recorder */}
+        <VoiceOnlyRecorder 
+          onConversationUpdate={(conv) => {
+            setConversation(conv);
+            setIsActive(conv.length > 0);
+          }}
+        />
+
+        {/* Footer Info */}
+        <motion.footer 
+          className="text-center mt-12 text-purple-200"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+        >
+          <p className="text-sm">
+            🔧 Multi-Engine STT • 🎯 BERT Emotion • 🗣️ Natural TTS • ⚡ Real-time
+          </p>
+        </motion.footer>
       </div>
     </div>
   );

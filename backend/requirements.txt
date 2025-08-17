@@ -14,3 +14,23 @@ librosa==0.10.1
 soundfile==0.12.1
 python-dotenv==1.0.0
 aiofiles==23.2.1
+
+# Voice Processing Engines
+speechrecognition==3.10.0
+pyttsx3==2.90
+gTTS==2.4.0
+azure-cognitiveservices-speech==1.34.1
+google-cloud-speech==2.22.0
+boto3==1.34.17
+edge-tts==6.1.9
+TTS==0.21.1
+
+# Audio Processing
+pyaudio==0.2.11
+wave==0.0.2
+pydub==0.25.1
+noisereduce==3.0.0
+webrtcvad==2.0.10
+
+# Emotion & Intent
+parselmouth==0.5.4

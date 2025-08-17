@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List
 import uvicorn
+from services.audio_processor import VoiceProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,7 @@ app.add_middleware(
 # Global services (will be initialized on startup)
 audio_processor = None
 ai_models = None
+voice_processor = None
 connection_manager = None
 
 class ConnectionManager:
@@ -105,6 +107,7 @@ async def startup_event():
     # Initialize services
     audio_processor = MockAudioProcessor()
     ai_models = MockAIModels()
+    voice_processor = VoiceProcessor()
     connection_manager = ConnectionManager()
     
     # Load AI models
@@ -146,55 +149,65 @@ async def websocket_endpoint(websocket: WebSocket):
             
             if message_data["type"] == "audio":
                 try:
-                    # Decode audio data
+                    # Decode audio
                     audio_data = base64.b64decode(message_data["data"])
+                    logger.info(f"Received audio: {len(audio_data)} bytes")
                     
-                    # Process audio through pipeline
-                    logger.info("Starting audio processing pipeline...")
+                    # REAL-TIME VOICE PROCESSING
+                    voice_result = await voice_processor.process_voice_input(audio_data)
                     
-                    # Step 1: Audio preprocessing
-                    processed_audio = await audio_processor.preprocess_audio(audio_data)
+                    if not voice_result['success']:
+                        error_response = {
+                            "type": "message",
+                            "user_message": "",
+                            "bot_message": voice_result['message'],
+                            "audio": base64.b64encode(voice_result['audio']).decode(),
+                            "timestamp": datetime.now().isoformat(),
+                            "emotion": "sad"
+                        }
+                        await connection_manager.send_personal_message(error_response, websocket)
+                        continue
                     
-                    # Step 2: Speech-to-Text
-                    transcription = await audio_processor.transcribe_audio(processed_audio)
-                    logger.info(f"Transcription: {transcription}")
+                    # Understand intent using existing AI models
+                    intent_data = await ai_models.understand_intent(voice_result['text'])
+                    intent_data['emotion'] = voice_result['emotion']
                     
-                    # Step 3: Natural Language Understanding
-                    intent_data = await ai_models.understand_intent(transcription)
-                    
-                    # Step 4: Generate Persian response
+                    # Generate response
                     response_text = await ai_models.generate_response(intent_data)
-                    logger.info(f"Generated response: {response_text}")
                     
-                    # Step 5: Text-to-Speech
-                    response_audio = await ai_models.synthesize_speech(response_text)
+                    # Generate emotional voice response
+                    response_audio = await voice_processor.generate_voice_response(
+                        response_text, 
+                        voice_result['emotion']
+                    )
                     
-                    # Prepare response
+                    # Send complete voice response
                     response = {
                         "type": "message",
-                        "user_message": {
-                            "id": f"user_{message_data['timestamp']}",
-                            "type": "user",
-                            "content": transcription,
-                            "timestamp": message_data["timestamp"]
-                        },
-                        "bot_message": {
-                            "id": f"bot_{datetime.now().timestamp()}",
-                            "type": "bot",
-                            "content": response_text,
-                            "timestamp": int(datetime.now().timestamp() * 1000),
-                            "audio": base64.b64encode(response_audio).decode() if response_audio else None
-                        }
+                        "user_message": voice_result['text'],
+                        "bot_message": response_text,
+                        "audio": base64.b64encode(response_audio).decode(),
+                        "timestamp": datetime.now().isoformat(),
+                        "emotion": voice_result['emotion'],
+                        "confidence": voice_result['confidence'],
+                        "engine_used": voice_result['engine_used'],
+                        "process_time": voice_result['process_time']
                     }
                     
-                    # Send response back to client
                     await connection_manager.send_personal_message(response, websocket)
                     
+                    logger.info(f"Voice conversation: '{voice_result['text']}' -> '{response_text}' [{voice_result['emotion']}]")
+                    
                 except Exception as e:
-                    logger.error(f"Error processing audio: {e}")
+                    logger.error(f"Voice processing error: {e}")
+                    error_audio = await voice_processor.generate_voice_response(
+                        "متاسفانه خطایی رخ داد. لطفاً دوباره تلاش کنید."
+                    )
+                    
                     error_response = {
                         "type": "error",
-                        "message": "خطا در پردازش صدا. لطفاً دوباره تلاش کنید.",
+                        "message": "خطا در پردازش صدا",
+                        "audio": base64.b64encode(error_audio).decode(),
                         "timestamp": int(datetime.now().timestamp() * 1000)
                     }
                     await connection_manager.send_personal_message(error_response, websocket)
