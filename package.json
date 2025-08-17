@@ -1,0 +1,57 @@
+{
+  "name": "persian-ai-chatbot",
+  "version": "1.0.0",
+  "description": "Persian AI Chatbot with voice capabilities - Full Stack Development Environment",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "python dev-start.py",
+    "dev:unix": "./dev-start.sh",
+    "dev:windows": "dev-start.bat",
+    "dev:docker": "docker-compose -f docker-compose.dev.yml up --build",
+    "dev:docker:down": "docker-compose -f docker-compose.dev.yml down -v",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && python -m venv venv && venv/bin/pip install -r requirements.txt",
+    "install:backend:windows": "cd backend && python -m venv venv && venv\\Scripts\\pip install -r requirements.txt",
+    "backend:dev": "cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+    "frontend:dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "test": "cd frontend && npm test",
+    "lint": "cd frontend && npm run lint",
+    "clean": "npm run clean:frontend && npm run clean:backend",
+    "clean:frontend": "cd frontend && rm -rf .next node_modules",
+    "clean:backend": "cd backend && rm -rf venv __pycache__ .pytest_cache",
+    "clean:windows": "cd frontend && rmdir /s /q .next node_modules 2>nul & cd ../backend && rmdir /s /q venv __pycache__ .pytest_cache 2>nul",
+    "setup": "npm run install:all && echo 'Setup complete! Run npm run dev to start development servers'",
+    "docker:build": "docker-compose -f docker-compose.dev.yml build",
+    "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f",
+    "docker:restart": "docker-compose -f docker-compose.dev.yml restart"
+  },
+  "keywords": [
+    "persian",
+    "ai",
+    "chatbot",
+    "voice",
+    "fastapi",
+    "nextjs",
+    "websocket",
+    "speech-recognition"
+  ],
+  "author": "Persian AI Chatbot Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.8.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aminchedo/SimpleChatbot2"
+  }
+}
