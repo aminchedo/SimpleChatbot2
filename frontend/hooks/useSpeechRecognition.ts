@@ -1,12 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
-
 interface UseSpeechRecognitionProps {
   onResult: (transcript: string, confidence: number) => void;
   onError: (error: string) => void;
@@ -22,16 +15,16 @@ export function useSpeechRecognition({
 }: UseSpeechRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     // Check if Speech Recognition is supported
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
-    if (SpeechRecognition) {
+    if (SpeechRecognitionConstructor) {
       setIsSupported(true);
       
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognitionConstructor() as SpeechRecognition;
       recognition.continuous = continuous;
       recognition.interimResults = false;
       recognition.lang = lang;
@@ -42,7 +35,7 @@ export function useSpeechRecognition({
         setIsListening(true);
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const result = event.results[event.results.length - 1];
         const transcript = result[0].transcript;
         const confidence = result[0].confidence;
@@ -51,7 +44,7 @@ export function useSpeechRecognition({
         onResult(transcript, confidence);
       };
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('❌ Speech recognition error:', event.error);
         setIsListening(false);
         
