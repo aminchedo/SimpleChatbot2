@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Mic, MicOff, Send, Wifi, WifiOff } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
@@ -7,7 +7,11 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface AudioRecorderProps {
   onRecordingChange: (recording: boolean) => void;
-  onMessage: (message: any) => void;
+  onMessage: (message: {
+    type: string;
+    content: string;
+    timestamp: number;
+  }) => void;
   onProcessingChange: (processing: boolean) => void;
 }
 
@@ -49,7 +53,8 @@ export default function AudioRecorder({
     if (audioBlob) {
       onProcessingChange(true);
       const arrayBuffer = await audioBlob.arrayBuffer();
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const base64Audio = btoa(String.fromCharCode(...Array.from(uint8Array)));
       
       // Add user message immediately
       const userMessage = {

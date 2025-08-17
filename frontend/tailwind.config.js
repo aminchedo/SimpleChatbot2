@@ -8,7 +8,13 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        'persian': ['Vazir', 'Tahoma', 'Arial', 'sans-serif'],
+        'arabic': ['Noto Sans Arabic', 'Tahoma', 'Arial', 'sans-serif'],
+        'persian': ['Noto Sans Arabic', 'Tahoma', 'Arial', 'sans-serif'],
+      },
+      colors: {
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        border: 'hsl(var(--border))',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
