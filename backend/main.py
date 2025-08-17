@@ -245,7 +245,11 @@ async def handle_audio_message(websocket: WebSocket, data: dict, client_id: str)
         intent_data = await ai_models.understand_intent(extracted_text)
         intent_data['emotion'] = voice_result.get('emotion', 'neutral')
         
+<<<<<<< HEAD
         response_text = await ai_models.generate_response(intent_data, extracted_text)
+=======
+        response_text = await ai_models.generate_response(intent_data)
+>>>>>>> origin/cursor/persian-ai-chatbot-production-readiness-5fed
         
         # Generate voice response
         response_audio = await voice_processor.generate_voice_response(
@@ -299,7 +303,11 @@ async def handle_text_message(websocket: WebSocket, data: dict, client_id: str):
         
         # Process with AI
         intent_data = await ai_models.understand_intent(text_input)
+<<<<<<< HEAD
         response_text = await ai_models.generate_response(intent_data, text_input)
+=======
+        response_text = await ai_models.generate_response(intent_data)
+>>>>>>> origin/cursor/persian-ai-chatbot-production-readiness-5fed
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
