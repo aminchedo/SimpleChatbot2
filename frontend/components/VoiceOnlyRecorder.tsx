@@ -24,10 +24,11 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     onDataAvailable: setAudioBlob,
   });
 
-  const { sendMessage, isConnected } = useWebSocket({
-    url: process.env.NODE_ENV === 'production' 
-      ? 'wss://your-backend.railway.app/ws/chat'
-      : 'ws://localhost:8000/ws/chat',
+  const { sendMessage, isConnected, connectionError } = useWebSocket({
+    url: process.env.NEXT_PUBLIC_WS_URL || 
+         (process.env.NODE_ENV === 'production' 
+           ? '' // Disable WebSocket in production if not configured
+           : 'ws://localhost:8000/ws/chat'),
     onMessage: async (data) => {
       if (data.type === 'message') {
         setLastTranscription(data.user_message);
@@ -83,16 +84,46 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   }, [isRecording, isProcessing, startRecording, stopRecording, currentAudio]);
 
   const handleSendAudio = useCallback(async (audioBlob: Blob) => {
+    if (!isConnected) {
+      // Demo mode - show a sample response
+      const demoResponses = [
+        { user: "سلام", bot: "سلام! خوش آمدید. چطور می‌تونم کمکتون کنم؟" },
+        { user: "حالت چطوره؟", bot: "من یک ربات هوشمندم و همیشه آماده کمک به شما هستم!" },
+        { user: "چه خبر؟", bot: "متأسفانه سرویس صوتی در دسترس نیست، اما رابط کاربری کار می‌کند." }
+      ];
+      
+      const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)];
+      
+      setLastTranscription(randomResponse.user);
+      setBotResponse(randomResponse.bot);
+      
+      const newTurn = {
+        id: Date.now(),
+        user: randomResponse.user,
+        bot: randomResponse.bot,
+        timestamp: new Date(),
+        emotion: 'neutral'
+      };
+      
+      setConversation(prev => [...prev, newTurn]);
+      onConversationUpdate([...conversation, newTurn]);
+      return;
+    }
+
     const arrayBuffer = await audioBlob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
     
-    sendMessage({
+    const success = sendMessage({
       type: 'audio',
       data: base64Audio,
       timestamp: Date.now()
     });
-  }, [sendMessage]);
+
+    if (!success) {
+      console.warn('Failed to send audio message - WebSocket not connected');
+    }
+  }, [sendMessage, isConnected, conversation, onConversationUpdate]);
 
   const playAudioResponse = useCallback(async (base64Audio: string) => {
     try {
@@ -165,14 +196,28 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className={`flex items-center space-x-2 text-sm ${
-          isConnected ? 'text-green-400' : 'text-red-400'
-        }`}
+        className={`flex flex-col items-center space-y-2`}
       >
-        {isConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
-        <span className="persian-text">
-          {isConnected ? 'متصل به سرور' : 'قطع ارتباط'}
-        </span>
+        <div className={`flex items-center space-x-2 text-sm ${
+          isConnected ? 'text-green-400' : 'text-red-400'
+        }`}>
+          {isConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
+          <span className="persian-text">
+            {isConnected ? 'متصل به سرور' : 'قطع ارتباط'}
+          </span>
+        </div>
+        
+        {connectionError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-xs text-yellow-400 text-center persian-text max-w-md"
+          >
+            {connectionError === 'Backend service not available' 
+              ? 'سرویس صوتی در دسترس نیست - در حالت نمایشی' 
+              : 'خطا در اتصال به سرور'}
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Conversation Display */}
@@ -205,7 +250,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       <div className="relative">
         <motion.button
           onClick={handleRecordToggle}
-          disabled={!isConnected || isProcessing}
+          disabled={isProcessing}
           className={`relative w-32 h-32 rounded-full border-4 transition-all duration-300 ${
             isRecording 
               ? 'bg-red-500 border-red-300 shadow-lg shadow-red-500/50' 
@@ -215,10 +260,10 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
               ? 'bg-purple-500 border-purple-300 shadow-lg shadow-purple-500/50'
               : isConnected
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-300 hover:shadow-lg hover:shadow-green-500/50'
-              : 'bg-gray-500 border-gray-400 cursor-not-allowed'
+              : 'bg-gradient-to-r from-yellow-500 to-orange-500 border-yellow-300 hover:shadow-lg hover:shadow-yellow-500/50'
           }`}
-          whileHover={isConnected ? { scale: 1.05 } : {}}
-          whileTap={isConnected ? { scale: 0.95 } : {}}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           animate={isRecording ? {
             scale: [1, 1.1, 1],
             transition: { duration: 1, repeat: Infinity }

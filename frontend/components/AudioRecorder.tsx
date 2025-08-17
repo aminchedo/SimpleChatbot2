@@ -23,10 +23,11 @@ export default function AudioRecorder({
     onDataAvailable: setAudioBlob,
   });
 
-  const { sendMessage, isConnected } = useWebSocket({
-    url: process.env.NODE_ENV === 'production' 
-      ? 'wss://your-backend.railway.app/ws/chat'
-      : 'ws://localhost:8000/ws/chat',
+  const { sendMessage, isConnected, connectionError } = useWebSocket({
+    url: process.env.NEXT_PUBLIC_WS_URL || 
+         (process.env.NODE_ENV === 'production' 
+           ? '' // Disable WebSocket in production if not configured
+           : 'ws://localhost:8000/ws/chat'),
     onMessage: (data) => {
       onMessage(data);
       onProcessingChange(false);
