@@ -84,7 +84,8 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
 
   const handleSendAudio = useCallback(async (audioBlob: Blob) => {
     const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
     
     sendMessage({
       type: 'audio',
@@ -96,7 +97,11 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const playAudioResponse = useCallback(async (base64Audio: string) => {
     try {
       const audioData = atob(base64Audio);
-      const audioBlob = new Blob([new Uint8Array([...audioData].map(c => c.charCodeAt(0)))], {
+      const uint8Array = new Uint8Array(audioData.length);
+      for (let i = 0; i < audioData.length; i++) {
+        uint8Array[i] = audioData.charCodeAt(i);
+      }
+      const audioBlob = new Blob([uint8Array], {
         type: 'audio/wav'
       });
       

@@ -4,8 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import VoiceOnlyRecorder from '@/components/VoiceOnlyRecorder';
 import VoiceVisualizer from '@/components/VoiceVisualizer';
 
+interface ConversationTurn {
+  id: number;
+  user: string;
+  bot: string;
+  timestamp: Date;
+  emotion?: string;
+}
+
 export default function VoiceOnlyChat() {
-  const [conversation, setConversation] = useState([]);
+  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
   const [isActive, setIsActive] = useState(false);
 
   return (

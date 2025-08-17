@@ -92,7 +92,7 @@ class ApiClient {
         throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
       }
 
-      return responseData.data || responseData;
+      return responseData.data || (responseData as T);
     } catch (error) {
       console.error('API POST error:', error);
       throw error;
@@ -120,7 +120,7 @@ class ApiClient {
         throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
       }
 
-      return responseData.data || responseData;
+      return responseData.data || (responseData as T);
     } catch (error) {
       console.error('API GET error:', error);
       throw error;
