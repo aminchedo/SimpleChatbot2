@@ -5,7 +5,7 @@ import VoiceOnlyRecorder from '@/components/VoiceOnlyRecorder';
 import VoiceVisualizer from '@/components/VoiceVisualizer';
 
 export default function VoiceOnlyChat() {
-  const [conversation, setConversation] = useState([]);
+  const [conversation, setConversation] = useState<any[]>([]);
   const [isActive, setIsActive] = useState(false);
 
   return (
