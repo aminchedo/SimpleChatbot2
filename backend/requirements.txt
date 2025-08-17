@@ -4,22 +4,41 @@ uvicorn[standard]==0.24.0
 websockets==12.0
 python-multipart==0.0.6
 
-# Voice Processing Engines
-speechrecognition==3.10.0
-pyttsx3==2.90
+# AI and ML
+torch>=2.5.0
+transformers==4.35.0
+
+# Voice Processing
+SpeechRecognition==3.10.0
 gTTS==2.4.0
+pyttsx3==2.90
 edge-tts==6.1.9
 
 # Audio Processing
-pyaudio==0.2.11
-pydub==0.25.1
-numpy==1.24.3
 librosa==0.10.1
+numpy>=1.24.0
+scipy>=1.11.0
+soundfile==0.12.1
+pydub==0.25.1
+torchaudio>=2.5.0
 
-# AI and ML
-transformers==4.35.0
-torch==2.1.0
-torchaudio==2.1.0
+# File handling and async
+aiofiles==23.2.1
 
-# Utilities
+# Security and Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Environment and Configuration
 python-dotenv==1.0.0
+
+# HTTP requests
+requests==2.31.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Logging and monitoring
+structlog==23.2.0
