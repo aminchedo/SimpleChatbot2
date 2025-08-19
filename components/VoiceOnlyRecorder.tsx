@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
@@ -25,6 +25,8 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const [botResponse, setBotResponse] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  const recordingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const maxRecordingTime = 30000; // 30 seconds maximum recording time
 
   // Initialize browser-based services
   const { conversation, isProcessing, processMessage } = usePersianChatbot({
@@ -52,9 +54,15 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   });
 
-  const { isListening, isSupported: sttSupported, startListening, stopListening } = useSpeechRecognition({
+  const { isListening, isSupported: sttSupported, startListening, stopListening, abortListening } = useSpeechRecognition({
     onResult: async (transcript, confidence) => {
       console.log('📝 Transcript received:', transcript, 'Confidence:', confidence);
+      
+      // Clear timeout and stop recording
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
       setIsRecording(false);
       
       if (confidence > 0.3) { // Minimum confidence threshold
@@ -75,10 +83,34 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     },
     onError: (errorMsg) => {
       console.error('STT Error:', errorMsg);
+      
+      // Clear timeout and stop recording
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
       setIsRecording(false);
-      setError(errorMsg);
+      
+      // Provide more specific error messages
+      let userFriendlyError = errorMsg;
+      if (errorMsg.includes('no-speech')) {
+        userFriendlyError = 'صدایی شنیده نشد. لطفاً نزدیک‌تر به میکروفون صحبت کنید.';
+      } else if (errorMsg.includes('network')) {
+        userFriendlyError = 'مشکل در اتصال اینترنت. لطفاً اتصال خود را بررسی کنید.';
+      } else if (errorMsg.includes('not-allowed')) {
+        userFriendlyError = 'دسترسی به میکروفون مجاز نیست. لطفاً در تنظیمات مرورگر اجازه دهید.';
+      }
+      
+      setError(userFriendlyError);
     }
   });
+
+  // Sync recording state with listening state
+  useEffect(() => {
+    if (isListening !== isRecording) {
+      setIsRecording(isListening);
+    }
+  }, [isListening, isRecording]);
 
   // Update connection status based on browser API support
   useEffect(() => {
@@ -103,15 +135,38 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   }, [error]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleStartRecording = useCallback(() => {
-    if (!sttSupported || isProcessing || isSpeaking) return;
+    if (!sttSupported || isProcessing || isSpeaking || isListening) return;
     
     setError(null);
     setIsRecording(true);
     startListening();
-  }, [sttSupported, isProcessing, isSpeaking, startListening]);
+    
+    // Set timeout to automatically stop recording after max time
+    recordingTimeoutRef.current = setTimeout(() => {
+      console.log('Recording timeout reached, stopping...');
+      handleStopRecording();
+      setError('ضبط صدا به دلیل طولانی بودن متوقف شد. لطفاً کوتاه‌تر صحبت کنید.');
+    }, maxRecordingTime);
+    
+  }, [sttSupported, isProcessing, isSpeaking, isListening, startListening]);
 
   const handleStopRecording = useCallback(() => {
+    // Clear timeout
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    
     if (isListening) {
       stopListening();
     }
@@ -119,18 +174,18 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   }, [isListening, stopListening]);
 
   const handleRecordToggle = useCallback(() => {
-    if (isRecording) {
+    if (isRecording || isListening) {
       handleStopRecording();
     } else {
       handleStartRecording();
     }
-  }, [isRecording, handleStartRecording, handleStopRecording]);
+  }, [isRecording, isListening, handleStartRecording, handleStopRecording]);
 
   const getStatusText = () => {
     if (!sttSupported || !ttsSupported) return '🔴 مرورگر پشتیبانی نمی‌کند';
     if (error) return `❌ ${error}`;
     if (isProcessing) return '🧠 در حال پردازش...';
-    if (isRecording) return '🎤 در حال ضبط صدا...';
+    if (isRecording || isListening) return '🎤 در حال ضبط صدا...';
     if (isSpeaking) return '🔊 ربات در حال صحبت...';
     return '👂 آماده شنیدن... کلیک کنید';
   };
@@ -138,12 +193,13 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const getStatusColor = () => {
     if (!sttSupported || !ttsSupported || error) return 'text-red-400';
     if (isProcessing) return 'text-blue-400';
-    if (isRecording) return 'text-green-400';
+    if (isRecording || isListening) return 'text-green-400';
     if (isSpeaking) return 'text-purple-400';
     return 'text-gray-300';
   };
 
   const isSystemReady = sttSupported && ttsSupported && !error;
+  const isCurrentlyRecording = isRecording || isListening;
 
   return (
     <div className="flex flex-col items-center space-y-8 p-8">
@@ -212,7 +268,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           onClick={handleRecordToggle}
           disabled={!isSystemReady || isProcessing}
           className={`relative w-32 h-32 rounded-full border-4 transition-all duration-300 ${
-            isRecording 
+            isCurrentlyRecording 
               ? 'bg-red-500 border-red-300 shadow-lg shadow-red-500/50' 
               : isProcessing
               ? 'bg-blue-500 border-blue-300 shadow-lg shadow-blue-500/50'
@@ -224,7 +280,7 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           }`}
           whileHover={isSystemReady ? { scale: 1.05 } : {}}
           whileTap={isSystemReady ? { scale: 0.95 } : {}}
-          animate={isRecording ? {
+          animate={isCurrentlyRecording ? {
             scale: [1, 1.1, 1],
             transition: { duration: 1, repeat: Infinity }
           } : isProcessing ? {
@@ -236,17 +292,17 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
             <div className="w-12 h-12 text-white mx-auto flex items-center justify-center text-2xl">🧠</div>
           ) : isSpeaking ? (
             <Volume2 className="w-12 h-12 text-white mx-auto" />
-          ) : isRecording ? (
+          ) : isCurrentlyRecording ? (
             <MicOff className="w-12 h-12 text-white mx-auto" />
           ) : (
             <Mic className="w-12 h-12 text-white mx-auto" />
           )}
           
           {/* Pulse Animation */}
-          {(isRecording || isSpeaking) && (
+          {(isCurrentlyRecording || isSpeaking) && (
             <motion.div
               className={`absolute inset-0 rounded-full border-4 ${
-                isRecording ? 'border-red-400' : 'border-purple-400'
+                isCurrentlyRecording ? 'border-red-400' : 'border-purple-400'
               }`}
               animate={{
                 scale: [1, 1.5, 2],
