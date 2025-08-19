@@ -105,7 +105,9 @@ export default function VoiceOnlyChat() {
         <VoiceOnlyRecorder 
           onConversationUpdate={(conv: ChatMessage[]) => {
             setConversation(conv);
-            setIsActive(conv.length > 0);
+          }}
+          onRecordingChange={(recording: boolean) => {
+            setIsActive(recording);
           }}
         />
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
@@ -16,15 +16,17 @@ interface ChatMessage {
 
 interface VoiceOnlyRecorderProps {
   onConversationUpdate: (conversation: ChatMessage[]) => void;
+  onRecordingChange?: (isRecording: boolean) => void;
 }
 
-export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRecorderProps) {
+export default function VoiceOnlyRecorder({ onConversationUpdate, onRecordingChange }: VoiceOnlyRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [lastTranscription, setLastTranscription] = useState('');
   const [botResponse, setBotResponse] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  const recordingTimeoutRef = useRef<number | null>(null);
 
   // Initialize browser-based services
   const { conversation, isProcessing, processMessage } = usePersianChatbot({
@@ -52,10 +54,15 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   });
 
-  const { isListening, isSupported: sttSupported, startListening, stopListening } = useSpeechRecognition({
+  const { isListening, isSupported: sttSupported, startListening, stopListening, abortListening } = useSpeechRecognition({
     onResult: async (transcript, confidence) => {
       console.log('📝 Transcript received:', transcript, 'Confidence:', confidence);
       setIsRecording(false);
+      onRecordingChange?.(false);
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
       
       if (confidence > 0.3) { // Minimum confidence threshold
         try {
@@ -76,6 +83,11 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     onError: (errorMsg) => {
       console.error('STT Error:', errorMsg);
       setIsRecording(false);
+      onRecordingChange?.(false);
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
       setError(errorMsg);
     }
   });
@@ -109,14 +121,33 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     setError(null);
     setIsRecording(true);
     startListening();
-  }, [sttSupported, isProcessing, isSpeaking, startListening]);
+    onRecordingChange?.(true);
+    // Safety timeout to auto-stop after 10s
+    if (recordingTimeoutRef.current) {
+      window.clearTimeout(recordingTimeoutRef.current);
+    }
+    recordingTimeoutRef.current = window.setTimeout(() => {
+      if (isListening) {
+        stopListening();
+      } else {
+        abortListening();
+      }
+      setIsRecording(false);
+      onRecordingChange?.(false);
+    }, 10000);
+  }, [sttSupported, isProcessing, isSpeaking, startListening, stopListening, abortListening, isListening, onRecordingChange]);
 
   const handleStopRecording = useCallback(() => {
     if (isListening) {
       stopListening();
     }
     setIsRecording(false);
-  }, [isListening, stopListening]);
+    onRecordingChange?.(false);
+    if (recordingTimeoutRef.current) {
+      window.clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+  }, [isListening, stopListening, onRecordingChange]);
 
   const handleRecordToggle = useCallback(() => {
     if (isRecording) {
@@ -130,9 +161,9 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     if (!sttSupported || !ttsSupported) return '🔴 مرورگر پشتیبانی نمی‌کند';
     if (error) return `❌ ${error}`;
     if (isProcessing) return '🧠 در حال پردازش...';
-    if (isRecording) return '🎤 در حال ضبط صدا...';
+    if (isRecording) return '🎤 در حال ضبط صدا (نگه دارید و صحبت کنید)';
     if (isSpeaking) return '🔊 ربات در حال صحبت...';
-    return '👂 آماده شنیدن... کلیک کنید';
+    return '👂 آماده شنیدن... دکمه را نگه دارید و صحبت کنید';
   };
 
   const getStatusColor = () => {
@@ -209,7 +240,9 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       {/* Main Record Button */}
       <div className="relative">
         <motion.button
-          onClick={handleRecordToggle}
+          onPointerDown={handleStartRecording}
+          onPointerUp={handleStopRecording}
+          onPointerLeave={isRecording ? handleStopRecording : undefined}
           disabled={!isSystemReady || isProcessing}
           className={`relative w-32 h-32 rounded-full border-4 transition-all duration-300 ${
             isRecording 
