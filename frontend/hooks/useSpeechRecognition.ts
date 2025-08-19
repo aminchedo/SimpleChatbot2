@@ -33,9 +33,9 @@ export function useSpeechRecognition({
       
       const recognition = new SpeechRecognition();
       recognition.continuous = continuous;
-      recognition.interimResults = false;
+      recognition.interimResults = true; // Enable interim results for better feedback
       recognition.lang = lang;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3; // Get more alternatives for better accuracy
 
       recognition.onstart = () => {
         console.log('🎤 Speech recognition started');
@@ -44,11 +44,26 @@ export function useSpeechRecognition({
 
       recognition.onresult = (event: any) => {
         const result = event.results[event.results.length - 1];
-        const transcript = result[0].transcript;
-        const confidence = result[0].confidence;
         
-        console.log('🗣️ Persian speech recognized:', transcript, 'Confidence:', confidence);
-        onResult(transcript, confidence);
+        // Only process final results to avoid multiple triggers
+        if (result.isFinal) {
+          // Try multiple alternatives to get the best one
+          let bestTranscript = '';
+          let bestConfidence = 0;
+          
+          for (let i = 0; i < Math.min(result.length, 3); i++) {
+            const alternative = result[i];
+            const confidence = alternative.confidence || 0.5; // Fallback confidence
+            
+            if (confidence > bestConfidence) {
+              bestTranscript = alternative.transcript;
+              bestConfidence = confidence;
+            }
+          }
+          
+          console.log('🗣️ Persian speech recognized:', bestTranscript, 'Confidence:', bestConfidence);
+          onResult(bestTranscript.trim(), bestConfidence);
+        }
       };
 
       recognition.onerror = (event: any) => {
@@ -106,7 +121,9 @@ export function useSpeechRecognition({
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
+      console.log('🛑 Stopping speech recognition immediately...');
       recognitionRef.current.stop();
+      setIsListening(false); // Immediately update state
     }
   }, [isListening]);
 

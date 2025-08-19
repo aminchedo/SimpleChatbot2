@@ -5,6 +5,7 @@ import { Mic, MicOff, Volume2, VolumeX, Wifi, WifiOff, AlertCircle } from 'lucid
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { usePersianChatbot } from '@/hooks/usePersianChatbot';
+import { useAudioLevel } from '@/hooks/useAudioLevel';
 
 interface ChatMessage {
   id: string;
@@ -25,6 +26,9 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const [botResponse, setBotResponse] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+
+  // Audio level monitoring
+  const { audioLevel, isDetectingAudio } = useAudioLevel({ isActive: isRecording });
 
   // Initialize browser-based services
   const { conversation, isProcessing, processMessage } = usePersianChatbot({
@@ -57,7 +61,8 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
       console.log('📝 Transcript received:', transcript, 'Confidence:', confidence);
       setIsRecording(false);
       
-      if (confidence > 0.3) { // Minimum confidence threshold
+      // Lower confidence threshold and better handling for Persian
+      if (transcript.length > 2 && confidence > 0.1) { // More lenient threshold
         try {
           const message = await processMessage(transcript);
           
@@ -65,19 +70,26 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           if (!isMuted && message.bot) {
             speak(message.bot);
           }
+          
+          // Clear any previous errors on successful recognition
+          setError(null);
         } catch (error) {
           console.error('Error processing message:', error);
           setError('خطا در پردازش پیام');
         }
+      } else if (transcript.length <= 2) {
+        setError('متن شناسایی شده خیلی کوتاه است. لطفاً واضح‌تر صحبت کنید.');
       } else {
-        setError('کیفیت تشخیص صدا پایین است. دوباره تلاش کنید.');
+        setError(`کیفیت تشخیص صدا پایین است (${Math.round(confidence * 100)}%). دوباره تلاش کنید.`);
       }
     },
     onError: (errorMsg) => {
       console.error('STT Error:', errorMsg);
       setIsRecording(false);
       setError(errorMsg);
-    }
+    },
+    continuous: false, // Ensure single-shot recognition
+    lang: 'fa-IR'
   });
 
   // Update connection status based on browser API support
@@ -103,15 +115,29 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
     }
   }, [error]);
 
-  const handleStartRecording = useCallback(() => {
+  const handleStartRecording = useCallback(async () => {
     if (!sttSupported || isProcessing || isSpeaking) return;
     
-    setError(null);
-    setIsRecording(true);
-    startListening();
+    // Check microphone permission first
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      setError(null);
+      setIsRecording(true);
+      startListening();
+    } catch (error: any) {
+      console.error('Microphone permission error:', error);
+      if (error.name === 'NotAllowedError') {
+        setError('دسترسی به میکروفون مجاز نیست. لطفاً از تنظیمات مرورگر اجازه دهید.');
+      } else if (error.name === 'NotFoundError') {
+        setError('میکروفون پیدا نشد. لطفاً میکروفون را وصل کنید.');
+      } else {
+        setError('خطا در دسترسی به میکروفون. لطفاً دوباره تلاش کنید.');
+      }
+    }
   }, [sttSupported, isProcessing, isSpeaking, startListening]);
 
   const handleStopRecording = useCallback(() => {
+    console.log('🛑 Stopping recording...');
     if (isListening) {
       stopListening();
     }
@@ -129,10 +155,14 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
   const getStatusText = () => {
     if (!sttSupported || !ttsSupported) return '🔴 مرورگر پشتیبانی نمی‌کند';
     if (error) return `❌ ${error}`;
-    if (isProcessing) return '🧠 در حال پردازش...';
-    if (isRecording) return '🎤 در حال ضبط صدا...';
+    if (isProcessing) return '🧠 در حال پردازش پیام شما...';
+    if (isRecording) {
+      return isDetectingAudio 
+        ? '🎤 در حال ضبط صدا... (صدا شناسایی شد)' 
+        : '🎤 در حال ضبط... (بلندتر صحبت کنید)';
+    }
     if (isSpeaking) return '🔊 ربات در حال صحبت...';
-    return '👂 آماده شنیدن... کلیک کنید';
+    return '👂 آماده شنیدن... دکمه را فشار دهید';
   };
 
   const getStatusColor = () => {
@@ -260,6 +290,51 @@ export default function VoiceOnlyRecorder({ onConversationUpdate }: VoiceOnlyRec
           )}
         </motion.button>
       </div>
+
+      {/* Audio Level Visualizer */}
+      <AnimatePresence>
+        {isRecording && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex flex-col items-center space-y-4"
+          >
+            {/* Audio Level Bars */}
+            <div className="flex items-end space-x-1 h-16">
+              {Array.from({ length: 20 }, (_, i) => (
+                <motion.div
+                  key={i}
+                  className={`w-2 rounded-full ${
+                    audioLevel * 20 > i 
+                      ? isDetectingAudio 
+                        ? 'bg-green-400' 
+                        : 'bg-yellow-400'
+                      : 'bg-gray-600'
+                  }`}
+                  style={{
+                    height: `${Math.max(4, audioLevel * 60)}px`,
+                  }}
+                  animate={{
+                    height: audioLevel * 20 > i ? `${Math.max(8, audioLevel * 60)}px` : '4px',
+                    transition: { duration: 0.1 }
+                  }}
+                />
+              ))}
+            </div>
+            
+            {/* Voice Detection Status */}
+            <div className={`text-sm ${isDetectingAudio ? 'text-green-400' : 'text-yellow-400'} persian-text`}>
+              {isDetectingAudio ? '🎤 صدا شناسایی شد' : '🔇 در انتظار صدا...'}
+            </div>
+            
+            {/* Audio Level Percentage */}
+            <div className="text-xs text-gray-400">
+              سطح صدا: {Math.round(audioLevel * 100)}%
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Status Text */}
       <motion.div
